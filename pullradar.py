@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -118,12 +119,19 @@ def fetch_card(card_id):
     if fixture:
         card = read_json(Path(fixture), {})[card_id]
     else:
-        request = urllib.request.Request(API + card_id, headers={"User-Agent": "PullRadar/1.0 (editorial market monitoring)"})
-        with urllib.request.urlopen(request, timeout=20) as response:
-            card = json.load(response)
+        for attempt in range(3):
+            request = urllib.request.Request(API + card_id + f"?pullradar={int(time.time())}-{attempt}",
+                headers={"User-Agent": "PullRadar/1.0 (editorial market monitoring)",
+                         "Accept": "application/json", "Cache-Control": "no-cache"})
+            with urllib.request.urlopen(request, timeout=20) as response:
+                card = json.load(response)
+            if (card.get("pricing") or {}).get("cardmarket"):
+                break
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
     if card.get("id") != card_id or not card.get("name") or not card.get("set", {}).get("name"):
         raise ValueError(f"Scheda incompleta: {card_id}")
-    price = card.get("pricing", {}).get("cardmarket", {})
+    price = (card.get("pricing") or {}).get("cardmarket") or {}
     stamp = price.get("updated")
     if not stamp:
         raise ValueError(f"Prezzo senza data: {card_id}")
