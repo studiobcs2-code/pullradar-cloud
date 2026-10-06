@@ -23,6 +23,8 @@ DAY = NOW.date().isoformat()
 PUBLIC = ROOT / "public" / DAY
 STATE = ROOT / "state.json"
 PLAN = ROOT / "plan.json"
+SNAPSHOTS = ROOT / "snapshots.json"
+INSIGHTS = ROOT / "insights.json"
 API = "https://api.tcgdex.net/v2/it/cards/"
 BUFFER = "https://api.buffer.com"
 
@@ -33,6 +35,70 @@ def write_json(path, value):
 
 def read_json(path, fallback):
     return json.loads(path.read_text()) if path.exists() else fallback
+
+
+def price_change(card, history):
+    """Compare only the same Cardmarket trend metric for the same card."""
+    previous = [x for x in history.get(card["id"], []) if x.get("date", "") < DAY
+                and x.get("metric") == "cardmarket.trend" and isinstance(x.get("value"), (int, float))
+                and x["value"] > 0]
+    if not previous:
+        return "Variazione: storico non disponibile"
+    latest = max(previous, key=lambda x: x["date"])
+    old = latest["value"]
+    pct = (card["trend"] / old - 1) * 100
+    return f"Variazione vs {latest['date']}: {pct:+.1f}%"
+
+
+def record_prices(cards, history):
+    for card in cards:
+        rows = [x for x in history.get(card["id"], []) if x.get("date") != DAY]
+        rows.append({"date": DAY, "metric": "cardmarket.trend", "value": card["trend"],
+                     "source_updated": card["updated"]})
+        history[card["id"]] = rows[-60:]
+    write_json(SNAPSHOTS, history)
+
+
+def buffer_query(key, query):
+    request = urllib.request.Request(BUFFER, data=json.dumps({"query": query}).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.load(response)
+    if result.get("errors"):
+        raise RuntimeError(str(result["errors"]))
+    return result.get("data") or {}
+
+
+def read_insights():
+    """Read sent-post metrics; keep raw insights off the public repository."""
+    key, channel = os.environ.get("BUFFER_API_KEY"), os.environ.get("BUFFER_CHANNEL_ID")
+    if not key or not channel:
+        raise RuntimeError("Mancano credenziali Buffer per gli insight")
+    info = buffer_query(key, "query { channel(input:{id:" + json.dumps(channel) + "}) { organizationId } }")
+    org = (info.get("channel") or {}).get("organizationId")
+    if not org:
+        raise RuntimeError("Organizzazione Buffer non disponibile")
+    query = ("query { posts(first:50,input:{organizationId:" + json.dumps(org) +
+             ",filter:{status:[sent],channelIds:[" + json.dumps(channel) +
+             "]}}) { edges { node { id text metricsUpdatedAt metrics { type value } } } } }")
+    data = buffer_query(key, query)
+    scores = {"30th-149": [], "30th-150": []}
+    for edge in (data.get("posts") or {}).get("edges") or []:
+        post = edge.get("node") or {}
+        metrics = {m["type"]: m["value"] for m in post.get("metrics") or []}
+        denominator = metrics.get("views") or metrics.get("impressions") or 0
+        if denominator <= 0:
+            continue
+        for card_id in scores:
+            if "/" + card_id in post.get("text", ""):
+                engagement = sum(metrics.get(k, 0) for k in ("saves", "shares", "comments"))
+                scores[card_id].append((engagement + 1) / (denominator + 30))
+    choice = None
+    if all(len(values) >= 3 for values in scores.values()):
+        choice = max(scores, key=lambda cid: sum(scores[cid]) / len(scores[cid]))
+    write_json(INSIGHTS, {"date": DAY, "preferred_card_id": choice,
+                          "sample_count": {cid: len(values) for cid, values in scores.items()}})
+    print("Insight Buffer letti; priorità editoriale:", choice or "rotazione neutra")
 
 
 def font(size, bold=False):
@@ -129,17 +195,21 @@ def prepare():
         raise ValueError("Servono due schede valide per il pilota")
 
     a, b = cards
+    insight = read_json(INSIGHTS, {})
+    if insight.get("date") == DAY and insight.get("preferred_card_id") == b["id"]:
+        a, b = b, a
+    history = read_json(SNAPSHOTS, {})
+    a["change"] = price_change(a, history)
+    b["change"] = price_change(b, history)
+    record_prices(cards, history)
     s = read_json(STATE, {"scheduled": {}})
     write_json(STATE, s)
-    if DAY in s["scheduled"] and len(s["scheduled"][DAY]) == 5:
-        print("Cinque contenuti già programmati oggi; nessun doppione")
-        return
 
-    # Three distinct market angles. Each slide visibly shows the source date.
+    # Two distinct anniversary cards and a same-metric comparison.
     posts = [
-        ("charizard", a, ["Trend Cardmarket UE", f"€ {a['trend']:.2f}", f"{a['set']} · {a['localId']}", f"Fonte: TCGdex/Cardmarket", f"Aggiornato: {a['updated']}"]),
-        ("pikachu", b, ["Trend Cardmarket UE", f"€ {b['trend']:.2f}", f"{b['set']} · {b['localId']}", f"Fonte: TCGdex/Cardmarket", f"Aggiornato: {b['updated']}"]),
-        ("confronto", a, ["Due chase card, due trend", f"{a['name']}: € {a['trend']:.2f}", f"{b['name']}: € {b['trend']:.2f}", "Stessa metrica: trend UE", "Non è un prezzo di vendita garantito"]),
+        ("prima-variante", a, [f"30° Anniversario · {a['localId']}/128", "Trend Cardmarket UE", f"€ {a['trend']:.2f}", a["change"], f"Aggiornato: {a['updated']}"]),
+        ("seconda-variante", b, [f"30° Anniversario · {b['localId']}/128", "Trend Cardmarket UE", f"€ {b['trend']:.2f}", b["change"], f"Aggiornato: {b['updated']}"]),
+        ("confronto", a, [f"Pikachu-ex: {a['localId']} vs {b['localId']}", f"{a['localId']}/128: € {a['trend']:.2f}", f"{b['localId']}/128: € {b['trend']:.2f}", "Stessa metrica: trend UE", f"Aggiornato: {a['updated']}"]),
     ]
     plan = []
     for idx, (slug, c, lines) in enumerate(posts, 1):
@@ -156,10 +226,12 @@ def prepare():
             files.append(p.relative_to(ROOT).as_posix())
         subject = (f"{c['name']} — {c['set']} #{c['localId']}: € {c['trend']:.2f}"
                    if idx < 3 else
-                   f"{a['name']} € {a['trend']:.2f} / {b['name']} € {b['trend']:.2f}")
+                   f"Pikachu-ex {a['localId']}/128 € {a['trend']:.2f} / {b['localId']}/128 € {b['trend']:.2f}")
+        change_note = c["change"] if idx < 3 else "Due varianti dello stesso set; il trend non è una vendita conclusa"
         caption = (
             f"📡 {subject}\nTrend Cardmarket indicativo UE. "
             f"Fonte: TCGdex / Cardmarket, aggiornamento {c['updated']} (Roma). "
+            f"{change_note}. "
             "Il dato non identifica lingua, stato o prezzo di vendita della tua copia. "
             "Illustrazione originale del soggetto, non immagine della carta. "
             f"Scheda: {c['url']}\n#PokemonTCG #PullRadar #ChaseCards"
@@ -197,6 +269,17 @@ def persist_state(state):
         subprocess.run(["git", "push"], cwd=ROOT, check=True)
 
 
+def buffer_post_status(key, post_id):
+    query = "query { post(input:{id:" + json.dumps(post_id) + "}) { id status } }"
+    request = urllib.request.Request(BUFFER, data=json.dumps({"query": query}).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.load(response)
+    if result.get("errors"):
+        raise RuntimeError(str(result["errors"]))
+    return (result.get("data", {}).get("post") or {}).get("status")
+
+
 def publish():
     key = os.environ.get("BUFFER_API_KEY", "")
     channel = os.environ.get("BUFFER_CHANNEL_ID", "")
@@ -212,6 +295,14 @@ def publish():
     for item in plan["items"]:
         if item["key"] in state["scheduled"][DAY]:
             continue
+        if item["key"] == "story-2":
+            if datetime.now(ROME).hour < 19:
+                print("Storia di rimando: attendo il post delle 19")
+                continue
+            preceding_id = state["scheduled"][DAY].get("post-3")
+            if not preceding_id or buffer_post_status(key, preceding_id) != "sent":
+                print("Storia di rimando: il post precedente non risulta inviato")
+                continue
         due = datetime.combine(NOW.date(), datetime.min.time(), ROME).replace(hour=item["hour"])
         if due <= datetime.now(ROME) + timedelta(minutes=20):
             print(f"Slot passato: {item['key']}")
@@ -252,6 +343,7 @@ def publish():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in ("prepare", "publish"):
-        raise SystemExit("Uso: python pullradar.py prepare|publish")
-    (prepare if sys.argv[1] == "prepare" else publish)()
+    commands = {"prepare": prepare, "publish": publish, "insights": read_insights}
+    if len(sys.argv) != 2 or sys.argv[1] not in commands:
+        raise SystemExit("Uso: python pullradar.py prepare|publish|insights")
+    commands[sys.argv[1]]()

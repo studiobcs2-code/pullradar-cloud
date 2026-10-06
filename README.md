@@ -1,23 +1,23 @@
-# PullRadar cloud gratuito — pilota mercato
+# PullRadar cloud — mercato Pokémon 30° anniversario
 
-Questo progetto prepara caroselli e storie statiche da dati TCGdex, poi li programma su Buffer. È un **pilota**: non pubblica news, leak o classifiche di ricerca. Non usa scansioni delle carte. Le due illustrazioni sono fan art originali già preparate per PullRadar; il layout dichiara che non sono immagini della carta.
+Automazione Instagram gratuita per due Pikachu-ex del set italiano **30° Anniversario** (`30th-149` e `30th-150`). TCGdex fornisce il trend Cardmarket in euro e l'ora di aggiornamento. Le immagini sono illustrazioni originali del soggetto, non scansioni delle carte. Il numero della carta e il link alla scheda dati sono sempre nella didascalia.
 
-## Servizi gratuiti
+## Programmazione
 
-- Repository **pubblico** GitHub: Actions standard e file pubblici.
-- Buffer Free: fino a 10 elementi contemporanei in coda, API inclusa.
-- TCGdex: schede italiane e prezzi Cardmarket UE quando presenti.
+GitHub Actions esegue il flusso alle 07:17 e alle 19:25 (Europe/Rome). Buffer programma tre caroselli alle 09:00, 13:00 e 19:00, una storia alle 11:00 e una storia di rimando alle 20:00. La storia delle 20 viene programmata solo quando Buffer conferma che il post delle 19 è stato inviato. I ritardi del servizio possono far saltare uno slot.
 
-## Attivazione
+Lo script ferma la giornata se un prezzo manca, non è in EUR o ha più di 48 ore. `snapshots.json` conserva fino a 60 rilevazioni giornaliere per carta. La variazione compare solo dopo una rilevazione precedente della **stessa metrica**; non viene ricavata da prezzi di vendita o offerte isolate. I trend UE non rappresentano il prezzo di una specifica copia italiana.
 
-1. Crea un repository GitHub pubblico chiamato `pullradar-cloud` e carica il contenuto di questa cartella nella radice.
-2. In Buffer, apri **Settings → API** e genera una chiave personale. Non inserirla nei file o nella chat.
-3. Nel repository GitHub, vai su **Settings → Secrets and variables → Actions**. Crea il secret `BUFFER_API_KEY` con la chiave e la variable `BUFFER_CHANNEL_ID` con l'ID del canale Instagram.
-4. Avvia **Actions → PullRadar quotidiano → Run workflow**. Controlla il log e la coda Buffer prima di lasciare la programmazione quotidiana attiva.
-5. Dopo una pubblicazione riuscita, disattiva l'automazione locale per evitare doppioni.
+Il passaggio `Read Instagram insights` prova a leggere le metriche dei post inviati. Se sono disponibili almeno tre post con visualizzazioni per ciascuna variante, mette per prima quella con il migliore rapporto tra salvataggi, condivisioni, commenti e visualizzazioni. I valori grezzi e la chiave non vengono salvati nel repository. Se l'API non dà metriche, l'ordine resta neutro e le pubblicazioni possono continuare.
 
-Lo script non pubblica se la fonte prezzi è più vecchia di 48 ore, se la valuta non è EUR, se mancano dati delle due carte, o se i contenuti del giorno sono già stati programmati. I prezzi sono **trend Cardmarket UE indicativi** e non promesse di vendita o prezzi specifici per lingua/condizione. La storia di rimando dice di aprire il post nel profilo: Buffer non aggiunge automaticamente link o sticker alla storia.
+## Configurazione
 
-Il repository è pubblico: immagini e stato della pubblicazione sono visibili a tutti. La chiave Buffer deve stare esclusivamente nei Secrets di GitHub.
+- Secret Actions `BUFFER_API_KEY`: chiave Buffer personale.
+- Variable Actions `BUFFER_CHANNEL_ID`: ID del canale Instagram collegato.
+- Repository pubblico, così Buffer può scaricare le immagini create dal flusso.
 
-La programmazione GitHub può subire ritardi. Il sistema prepara i contenuti al mattino e Buffer gestisce gli orari 09:00, 11:00, 13:00, 19:00 e 20:00 Europe/Rome, se sono ancora futuri. Non promette cinque uscite ogni giorno quando i dati non superano i controlli.
+Il workflow verifica il canale Buffer prima di generare e programmare. I post già registrati in `state.json` non vengono creati due volte. Una prova con **Actions → PullRadar quotidiano → Run workflow** verifica credenziali, dati e generazione; un'esecuzione dopo l'ultimo slot non programma nuove uscite.
+
+## Ambito attuale
+
+Questo progetto pubblica contenuti di **mercato**. News dei set giapponesi, annunci ufficiali, leak e classifiche delle carte più cercate richiedono fonti e regole editoriali dedicate; non sono attivi qui. Nessun numero o evento di questi format viene inventato per riempire il calendario.
