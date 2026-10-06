@@ -1,6 +1,6 @@
 # PullRadar cloud — mercato Pokémon 30° anniversario
 
-Automazione Instagram gratuita per due Pikachu-ex del set italiano **30° Anniversario** (`30th-149` e `30th-150`). TCGdex fornisce il trend Cardmarket in euro e l'ora di aggiornamento. Le immagini sono illustrazioni originali del soggetto, non scansioni delle carte. Il numero della carta e il link alla scheda dati sono sempre nella didascalia.
+Automazione Instagram gratuita per due Pikachu-ex del set italiano **30° Anniversario** (`30th-149` e `30th-150`). La [guida prezzi ufficiale Cardmarket](https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json) fornisce il trend in euro e l'ora di aggiornamento; TCGdex fornisce nome, set e numero. Le immagini sono illustrazioni originali del soggetto, non scansioni delle carte. Il numero della carta e il link alla scheda dati sono sempre nella didascalia.
 
 ## Programmazione
 

@@ -8,7 +8,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -27,6 +26,7 @@ PLAN = ROOT / "plan.json"
 SNAPSHOTS = ROOT / "snapshots.json"
 INSIGHTS = ROOT / "insights.json"
 API = "https://api.tcgdex.net/v2/it/cards/"
+PRICE_GUIDE = "https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json"
 BUFFER = "https://api.buffer.com"
 
 
@@ -114,34 +114,40 @@ def font(size, bold=False):
     return ImageFont.load_default()
 
 
-def fetch_card(card_id):
+def fetch_price_guide():
+    request = urllib.request.Request(PRICE_GUIDE, headers={"User-Agent": "PullRadar/1.0"})
+    with urllib.request.urlopen(request, timeout=35) as response:
+        guide = json.load(response)
+    stamp = guide.get("createdAt")
+    if not stamp:
+        raise ValueError("Guida Cardmarket senza data")
+    updated = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S%z")
+    age = NOW.astimezone(timezone.utc) - updated.astimezone(timezone.utc)
+    if age < timedelta(minutes=-15) or age > timedelta(hours=48):
+        raise ValueError(f"Guida Cardmarket fuori finestra di aggiornamento: {stamp}")
+    rows = {row["idProduct"]: row for row in guide.get("priceGuides", [])}
+    return rows, updated
+
+
+def fetch_card(card_id, product_id, guide):
     fixture = os.environ.get("PULLRADAR_TEST_FIXTURE")
     if fixture:
         card = read_json(Path(fixture), {})[card_id]
     else:
-        for attempt in range(3):
-            request = urllib.request.Request(API + card_id + f"?pullradar={int(time.time())}-{attempt}",
-                headers={"User-Agent": "PullRadar/1.0 (editorial market monitoring)",
-                         "Accept": "application/json", "Cache-Control": "no-cache"})
-            with urllib.request.urlopen(request, timeout=20) as response:
-                card = json.load(response)
-            if (card.get("pricing") or {}).get("cardmarket"):
-                break
-            if attempt < 2:
-                time.sleep(2 * (attempt + 1))
+        request = urllib.request.Request(API + card_id,
+            headers={"User-Agent": "PullRadar/1.0 (editorial market monitoring)"})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            card = json.load(response)
     if card.get("id") != card_id or not card.get("name") or not card.get("set", {}).get("name"):
         raise ValueError(f"Scheda incompleta: {card_id}")
-    price = (card.get("pricing") or {}).get("cardmarket") or {}
-    stamp = price.get("updated")
-    if not stamp:
-        raise ValueError(f"Prezzo senza data: {card_id}")
-    updated = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-    if updated.astimezone(timezone.utc) > NOW.astimezone(timezone.utc) + timedelta(minutes=15):
-        raise ValueError(f"Data prezzo futura: {card_id}")
-    if NOW.astimezone(timezone.utc) - updated.astimezone(timezone.utc) > timedelta(hours=48):
-        raise ValueError(f"Prezzo oltre 48 ore: {card_id}, {stamp}")
-    if price.get("unit") != "EUR":
-        raise ValueError(f"Valuta diversa da EUR: {card_id}")
+    if fixture:
+        price = (card.get("pricing") or {}).get("cardmarket") or {}
+        updated = datetime.fromisoformat(price["updated"].replace("Z", "+00:00"))
+    else:
+        rows, updated = guide
+        price = rows.get(product_id)
+    if not price:
+        raise ValueError(f"Prodotto assente nella guida Cardmarket: {product_id}")
     # Use the same published metric for all cards. It describes EU marketplace
     # prices, not Italian-language transactions or a specific condition.
     value = price.get("trend")
@@ -192,11 +198,12 @@ def canvas(art_path, title, lines, out, story=False):
 
 def prepare():
     cards_cfg = read_json(ROOT / "cards.json", [])
+    guide = fetch_price_guide() if not os.environ.get("PULLRADAR_TEST_FIXTURE") else None
     cards = []
     for cfg in cards_cfg:
         if not (ROOT / cfg["art"]).exists():
             raise FileNotFoundError(cfg["art"])
-        item = fetch_card(cfg["id"])
+        item = fetch_card(cfg["id"], cfg["idProduct"], guide)
         item["art"] = cfg["art"]
         cards.append(item)
     if len(cards) != 2:
