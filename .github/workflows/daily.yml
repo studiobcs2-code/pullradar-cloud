@@ -6,6 +6,8 @@ on:
       timezone: Europe/Rome
     - cron: '25 19 * * *'
       timezone: Europe/Rome
+    - cron: '35 19 * * *'
+      timezone: Europe/Rome
     - cron: '15 21 * * *'
       timezone: Europe/Rome
 permissions:
