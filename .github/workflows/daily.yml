@@ -26,6 +26,25 @@ jobs:
           git config user.email 'pullradar-bot@users.noreply.github.com'
           git add public state.json
           if ! git diff --cached --quiet; then git commit -m 'Daily PullRadar assets'; git push; fi
+      - name: Verify Buffer channel
+        env:
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          BUFFER_CHANNEL_ID: ${{ vars.BUFFER_CHANNEL_ID }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request
+          channel = os.environ['BUFFER_CHANNEL_ID']
+          query = 'query { channel(input:{id:' + json.dumps(channel) + '}) { id name service isDisconnected isLocked isQueuePaused } }'
+          request = urllib.request.Request('https://api.buffer.com', data=json.dumps({'query': query}).encode(), headers={'Authorization': 'Bearer ' + os.environ['BUFFER_API_KEY'], 'Content-Type': 'application/json'}, method='POST')
+          with urllib.request.urlopen(request, timeout=30) as response:
+              result = json.load(response)
+          if result.get('errors'):
+              raise RuntimeError(result['errors'])
+          found = result.get('data', {}).get('channel') or {}
+          if found.get('id') != channel or found.get('service') != 'instagram' or any(found.get(k) for k in ('isDisconnected', 'isLocked', 'isQueuePaused')):
+              raise RuntimeError('Canale Instagram Buffer non disponibile')
+          print('Canale Buffer verificato:', found['name'])
+          PY
       - name: Schedule on Buffer
         env:
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
