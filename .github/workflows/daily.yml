@@ -6,6 +6,8 @@ on:
       timezone: Europe/Rome
     - cron: '25 19 * * *'
       timezone: Europe/Rome
+    - cron: '15 21 * * *'
+      timezone: Europe/Rome
 permissions:
   contents: write
 concurrency:
@@ -40,22 +42,31 @@ jobs:
           print('Canale Buffer verificato:', found['name'])
           PY
       - name: Read Instagram insights
+        if: github.event.schedule != '15 21 * * *'
         continue-on-error: true
         env:
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
           BUFFER_CHANNEL_ID: ${{ vars.BUFFER_CHANNEL_ID }}
         run: python pullradar.py insights
       - name: Prepare verified market content
+        if: github.event.schedule != '15 21 * * *'
         run: python pullradar.py prepare
       - name: Save public media
+        if: github.event.schedule != '15 21 * * *'
         run: |
           git config user.name 'pullradar-bot'
           git config user.email 'pullradar-bot@users.noreply.github.com'
           git add public state.json snapshots.json
           if ! git diff --cached --quiet; then git commit -m 'Daily PullRadar assets'; git push; fi
       - name: Schedule on Buffer
+        if: github.event.schedule != '15 21 * * *'
         env:
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
           BUFFER_CHANNEL_ID: ${{ vars.BUFFER_CHANNEL_ID }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python pullradar.py publish
+      - name: Audit sent posts and stories
+        if: github.event.schedule == '15 21 * * *'
+        env:
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+        run: python pullradar.py audit
