@@ -295,6 +295,28 @@ def buffer_post_status(key, post_id):
     return (result.get("data", {}).get("post") or {}).get("status")
 
 
+def audit():
+    """Fail a cloud run when any expected daily item was not sent."""
+    key = os.environ.get("BUFFER_API_KEY")
+    if not key:
+        raise RuntimeError("Manca la chiave Buffer per il controllo serale")
+    scheduled = read_json(STATE, {"scheduled": {}}).get("scheduled", {}).get(DAY, {})
+    expected = ["post-1", "story-1", "post-2", "post-3", "story-2"]
+    problems = []
+    for item in expected:
+        post_id = scheduled.get(item)
+        if not post_id:
+            problems.append(f"{item}: non programmato")
+            continue
+        status = buffer_post_status(key, post_id)
+        print(f"{item}: {status or 'stato sconosciuto'}")
+        if status != "sent":
+            problems.append(f"{item}: {status or 'stato sconosciuto'}")
+    if problems:
+        raise RuntimeError("Controllo serale: " + "; ".join(problems))
+    print("Tutti e cinque i contenuti risultano inviati da Buffer")
+
+
 def publish():
     key = os.environ.get("BUFFER_API_KEY", "")
     channel = os.environ.get("BUFFER_CHANNEL_ID", "")
@@ -358,7 +380,7 @@ def publish():
 
 
 if __name__ == "__main__":
-    commands = {"prepare": prepare, "publish": publish, "insights": read_insights}
+    commands = {"prepare": prepare, "publish": publish, "insights": read_insights, "audit": audit}
     if len(sys.argv) != 2 or sys.argv[1] not in commands:
-        raise SystemExit("Uso: python pullradar.py prepare|publish|insights")
+        raise SystemExit("Uso: python pullradar.py prepare|publish|insights|audit")
     commands[sys.argv[1]]()

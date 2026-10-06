@@ -4,7 +4,7 @@ Automazione Instagram gratuita per due Pikachu-ex del set italiano **30° Annive
 
 ## Programmazione
 
-GitHub Actions esegue il flusso alle 07:17 e alle 19:25 (Europe/Rome). Buffer programma tre caroselli alle 09:00, 13:00 e 19:00, una storia alle 11:00 e una storia di rimando alle 20:00. La storia delle 20 viene programmata solo quando Buffer conferma che il post delle 19 è stato inviato. I ritardi del servizio possono far saltare uno slot.
+GitHub Actions esegue il flusso alle 07:17 e alle 19:25 (Europe/Rome), senza dipendere dal Mac o da questa chat. Buffer programma tre caroselli alle 09:00, 13:00 e 19:00, una storia alle 11:00 e una storia di rimando alle 20:00. La storia delle 20 viene programmata solo quando Buffer conferma che il post delle 19 è stato inviato. Alle 21:15 un terzo flusso controlla che Buffer riporti tutti e cinque i contenuti come inviati: un'assenza o un errore rende rossa l'esecuzione GitHub Actions. I ritardi del servizio possono far saltare uno slot.
 
 Lo script ferma la giornata se un prezzo manca, non è in EUR o ha più di 48 ore. `snapshots.json` conserva fino a 60 rilevazioni giornaliere per carta. La variazione compare solo dopo una rilevazione precedente della **stessa metrica**; non viene ricavata da prezzi di vendita o offerte isolate. I trend UE non rappresentano il prezzo di una specifica copia italiana.
 
