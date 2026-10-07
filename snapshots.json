@@ -5,6 +5,12 @@
       "metric": "cardmarket.trend",
       "value": 50.01,
       "source_updated": "06/10/2026 02:48"
+    },
+    {
+      "date": "2026-10-07",
+      "metric": "cardmarket.trend",
+      "value": 48.97,
+      "source_updated": "07/10/2026 02:49"
     }
   ],
   "30th-150": [
@@ -13,6 +19,12 @@
       "metric": "cardmarket.trend",
       "value": 53.51,
       "source_updated": "06/10/2026 02:48"
+    },
+    {
+      "date": "2026-10-07",
+      "metric": "cardmarket.trend",
+      "value": 53.51,
+      "source_updated": "07/10/2026 02:49"
     }
   ]
 }
