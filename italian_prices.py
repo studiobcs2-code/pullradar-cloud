@@ -1,8 +1,10 @@
 """CardTrader asking-price snapshots for Italian Near Mint Pokémon singles."""
 
 import json
+import os
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from statistics import mean
 
 BASE = "https://api.cardtrader.com/api/v2"
@@ -69,3 +71,27 @@ def italian_nm_price(blueprint_id, token):
     if len(prices) < 5:
         raise ValueError(f"Meno di cinque offerte italiane Near Mint per blueprint {blueprint_id}")
     return round(mean(prices[:5]) / 100, 2), len(prices)
+
+
+if __name__ == "__main__":
+    token = os.environ.get("CARDTRADER_API_TOKEN")
+    if not token:
+        raise SystemExit("Manca CARDTRADER_API_TOKEN")
+    cards = json.loads((Path(__file__).resolve().parent / "cards.json").read_text())
+    blueprints = resolve_blueprints(cards, token)
+    valid = 0
+    for card in cards:
+        card_id = card["id"]
+        blueprint = blueprints.get(int(card["idProduct"]))
+        if not blueprint:
+            print(card_id, "stampa non trovata")
+            continue
+        try:
+            value, count = italian_nm_price(blueprint, token)
+        except ValueError as error:
+            print(card_id, str(error))
+            continue
+        print(card_id, f"€ {value:.2f}", f"{count} offerte IT NM")
+        valid += 1
+    if valid < 3:
+        raise SystemExit("Meno di tre carte con prezzi italiani verificati")
