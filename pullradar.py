@@ -9,12 +9,13 @@ import os
 import subprocess
 import sys
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFont
 from editorial import global_search_ranking, news_candidates
+from italian_prices import METRIC, italian_nm_price, resolve_blueprints
 
 
 ROOT = Path(__file__).resolve().parent
@@ -24,10 +25,42 @@ DAY = NOW.date().isoformat()
 PUBLIC = ROOT / "public" / DAY
 STATE = ROOT / "state.json"
 PLAN = ROOT / "plan.json"
+SNAPSHOTS = ROOT / "snapshots.json"
 INSIGHTS = ROOT / "insights.json"
 API = "https://api.tcgdex.net/v2/it/cards/"
 BUFFER = "https://api.buffer.com"
-PLAN_VERSION = 2
+PLAN_VERSION = 3
+
+
+def attach_price_history(cards):
+    history = read_json(SNAPSHOTS, {})
+    for card in cards:
+        previous = [row for row in history.get(card["id"], [])
+                    if row.get("metric") == METRIC and row.get("date", "") < DAY
+                    and isinstance(row.get("value"), (int, float)) and row["value"] > 0]
+        latest = max(previous, key=lambda row: row["date"]) if previous else None
+        card["previous"] = latest["value"] if latest else None
+        card["previous_date"] = latest["date"] if latest else None
+        card["direction"] = ("up" if card["previous"] is not None and card["price"] > card["previous"]
+                             else "down" if card["previous"] is not None and card["price"] < card["previous"]
+                             else "flat" if card["previous"] is not None else "new")
+        rows = [row for row in history.get(card["id"], []) if row.get("date") != DAY or row.get("metric") != METRIC]
+        rows.append({"date": DAY, "metric": METRIC, "value": card["price"],
+                     "offers": card["offers"], "source_updated": card["updated"]})
+        history[card["id"]] = rows[-60:]
+    write_json(SNAPSHOTS, history)
+
+
+def previous_label(card):
+    return (f"Precedente € {card['previous']:.2f} · {card['previous_date']}"
+            if card["previous"] is not None else "Precedente: prima rilevazione")
+
+
+def price_change_label(card):
+    if card["previous"] is None:
+        return "Variazione: dal prossimo confronto"
+    pct = (card["price"] / card["previous"] - 1) * 100
+    return f"Variazione: {pct:+.1f}%"
 
 
 def write_json(path, value):
@@ -119,7 +152,7 @@ def text(draw, xy, value, size=44, fill="white", bold=False):
     draw.text(xy, value, font=font(size, bold), fill=fill, stroke_width=0)
 
 
-def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC", note=None):
+def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC", note=None, price_direction=None):
     size = (1080, 1920) if story else (1080, 1350)
     im = Image.new("RGB", size, "#071522")
     art = Image.open(ROOT / art_path).convert("RGB")
@@ -155,7 +188,9 @@ def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC", note
         for chunk in chunks[:2]:
             if y > note_y - 53:
                 break
-            text(draw, (62, y), chunk, 36, "#dce9ed")
+            color = ("#ff6370" if price_direction == "down" else
+                     "#54e69a" if price_direction == "up" else "#dce9ed") if line.startswith("Prezzo attuale") else "#dce9ed"
+            text(draw, (62, y), chunk, 36, color)
             y += 53
         y += 7
     text(draw, (62, note_y), note or "Illustrazione originale · non immagine della carta", 23, "#9fb6c5")
@@ -167,19 +202,33 @@ def prepare():
     existing = read_json(PLAN, {})
     if (not os.environ.get("PULLRADAR_TEST_FIXTURE")
             and existing.get("date") == DAY and existing.get("source") == "live"
-            and existing.get("version") == PLAN_VERSION
             and existing.get("items")
             and all((ROOT / file).exists() for item in existing["items"] for file in item["files"])):
         print("Piano odierno già pronto; riuso i contenuti per la storia serale")
         return
 
     cards_cfg = read_json(ROOT / "cards.json", [])
+    fixture = os.environ.get("PULLRADAR_TEST_FIXTURE")
+    token = os.environ.get("CARDTRADER_API_TOKEN")
+    if not fixture and not token:
+        raise RuntimeError("Manca CARDTRADER_API_TOKEN: nessun post senza prezzi italiani verificati")
+    blueprints = {} if fixture else resolve_blueprints(cards_cfg, token)
     cards = []
     for cfg in cards_cfg:
         if not (ROOT / cfg["art"]).exists():
             raise FileNotFoundError(cfg["art"])
         try:
             item = fetch_card(cfg["id"])
+            if fixture:
+                quote = (read_json(Path(fixture), {})[cfg["id"]].get("italian_price") or {})
+                if quote.get("language") != "it" or quote.get("condition") != "Near Mint":
+                    raise ValueError("Fixture prezzo non italiano Near Mint")
+                item["price"], item["offers"] = float(quote["value"]), int(quote["offers"])
+            else:
+                blueprint_id = blueprints[int(cfg["idProduct"])]
+                item["price"], item["offers"] = italian_nm_price(blueprint_id, token)
+            if item["price"] <= 0 or item["offers"] < 5:
+                raise ValueError("Prezzo italiano senza cinque offerte verificabili")
         except (ValueError, KeyError, OSError) as error:
             print("Carta esclusa per dati incompleti:", cfg["id"], error)
             continue
@@ -187,7 +236,8 @@ def prepare():
         item["query"] = cfg.get("query", "")
         cards.append(item)
     if len(cards) < 3:
-        raise ValueError("Servono almeno tre schede verificate")
+        raise ValueError("Servono almeno tre schede con cinque offerte italiane Near Mint")
+    attach_price_history(cards)
 
     rotation = NOW.date().toordinal() % len(cards)
     ordered = cards[rotation:] + cards[:rotation]
@@ -208,7 +258,7 @@ def prepare():
         for slide, (slide_title, lines) in enumerate(slides, 1):
             p = PUBLIC / f"post-{number}-{slide}.jpg"
             artwork = (art_override or card["art"]) if slide == 1 else ("art/radar.jpg" if slide == 2 else "art/market-bars.jpg")
-            canvas(artwork, slide_title, lines, p, section=section)
+            canvas(artwork, slide_title, lines, p, section=section, price_direction=card["direction"])
             files.append(p.relative_to(ROOT).as_posix())
         item = {"key": f"post-{number}", "type": "post", "hour": hour, "files": files,
                 "caption": caption, "format": format_name, "title": title, "art": art_override or card["art"]}
@@ -219,14 +269,17 @@ def prepare():
     def market_post(number, hour, card):
         number_label = f"{card['localId']}/{card['setSize']}"
         slides = [
-            ("CHASE CARD", [card["name"], card["set"], f"Carta {number_label}", "Edizione italiana sotto radar"]),
-            ("MERCATO ITALIANO", [card["name"] + " · " + number_label,
-                                  "Prezzo italiano non verificato", "Monitoraggio in corso"]),
-            ("COME LEGGERLO", ["Confrontiamo solo copie italiane", "Stessa stampa e condizioni comparabili",
-                                "Nessun valore UE usato come prezzo IT"]),
+            ("CHASE CARD", [card["name"], card["set"], f"Carta {number_label}",
+                            f"Prezzo attuale € {card['price']:.2f}"]),
+            ("ANDAMENTO ITALIANO", [f"Prezzo attuale € {card['price']:.2f}", previous_label(card),
+                                    price_change_label(card), f"Rilevato {card['updated']} Roma"]),
+            ("METODO", ["Media 5 offerte italiane NM più basse", "CardTrader · prezzi richiesti",
+                         "Spedizione esclusa", "Non sono vendite concluse"]),
         ]
-        caption = (f"📡 {card['name']} · {card['set']} #{number_label}. "
-                   "Prezzo delle copie italiane non ancora verificato: nessun valore generico europeo viene mostrato. "
+        caption = (f"📡 {card['name']} · {card['set']} #{number_label}: € {card['price']:.2f} ora. "
+                   f"{previous_label(card)}; {price_change_label(card)}. "
+                   "Media delle 5 offerte italiane Near Mint più basse su CardTrader, spedizione esclusa; "
+                   f"rilevato {card['updated']} (Roma). Prezzo richiesto, non vendita conclusa. "
                    "Illustrazione originale ispirata al soggetto, non scansione della carta. "
                    f"Scheda: {card['url']}\n#PokemonTCG #PullRadar #ChaseCards")
         add_post(number, hour, card, card["name"] + " " + number_label, slides, caption, "mercato")
@@ -254,7 +307,8 @@ def prepare():
             ("COSA SAPPIAMO", [event.get("detail", "Titolo sintetizzato dalla fonte"), status,
                                 "Apri il link nella didascalia", closing]),
             ("CARTA SOTTO RADAR", [f"{card['name']} · {card['set']}",
-                                   "Prezzi: solo copie in italiano", "Valore non verificato: omesso"]),
+                                   f"Prezzo attuale € {card['price']:.2f}", previous_label(card),
+                                   "5 offerte italiane NM · CardTrader"]),
         ]
         prefix = ("⚠️ Indiscrezione non confermata." if event["kind"] == "indiscrezione" else
                   "📣 Annuncio ufficiale Pokémon." if event["kind"] == "ufficiale" else
@@ -264,7 +318,8 @@ def prepare():
                    f"Fonte: {event['source']}, {event['published']}. {event['url']}\n" +
                    (event.get("detail", "") + ". " if event.get("detail") else "") +
                    "Il carosello riporta il titolo della fonte; verifica i dettagli nell'articolo. "
-                   "Nessun prezzo pubblicato senza una rilevazione riferita a copie italiane. "
+                   f"Prezzo separato: {card['name']} € {card['price']:.2f}; {previous_label(card)}. "
+                   "Media 5 offerte italiane NM CardTrader, spedizione esclusa. "
                    "Illustrazione originale, non scansione. "
                    "#PokemonTCG #PullRadar #PokemonNews")
         add_post(number, hour, card, event["title"], slides, caption, event["kind"], event["url"], event.get("art"))
@@ -280,14 +335,16 @@ def prepare():
             ("COME SI MISURA", ["Query: nome + pokemon card", "Indice Google Trends relativo",
                                 "Non è numero di ricerche", "Non identifica una stampa precisa"]),
             ("CARTA IN EVIDENZA", [f"{card['name']} · {card['set']}",
-                                    "Prezzo italiano non verificato", "Ricerche e prezzi sono dati distinti"]),
+                                    f"Prezzo attuale € {card['price']:.2f}", previous_label(card),
+                                    "5 offerte italiane NM · CardTrader"]),
         ]
         listed = ", ".join(f"{name(q)} {score:.1f}" for q, score in ranking["scores"])
         caption = (f"🔎 Quali nomi di carte Pokémon sono più cercati nel mondo tra i {ranking['query_count']} monitorati? "
                    f"Google Trends, ultimi 7 giorni: {listed}. "
                    "Indice relativo medio, non numero assoluto di ricerche e non classifica di tutte le carte. "
                    f"Rilevazione {ranking['updated']} UTC. "
-                   "Prezzi omessi finché non sono verificati per copie italiane. Illustrazione originale. "
+                   f"Prezzo separato: {card['name']} € {card['price']:.2f}; {previous_label(card)}. "
+                   "Media 5 offerte italiane NM CardTrader, spedizione esclusa. Illustrazione originale. "
                    "Fonte: https://trends.google.com/trends/explore?date=now%207-d "
                    "#PokemonTCG #PullRadar #GoogleTrends")
         add_post(number, hour, card, "Ricerche globali", slides, caption, "ricerche")
@@ -311,15 +368,16 @@ def prepare():
     for idx, (hour, card, label) in enumerate([(11, a, "IL DATO DEL GIORNO"),
                                                (20, c, "NUOVO POST SUL PROFILO")], 1):
         p = PUBLIC / f"story-{idx}.jpg"
-        lines = [card['name'], "Prezzi: solo copie italiane",
-                 "Valore non verificato: omesso"]
+        lines = [card['name'], f"Prezzo attuale € {card['price']:.2f}", previous_label(card),
+                 "5 offerte italiane NM"]
         if idx == 2:
             post3 = next(item for item in plan if item["key"] == "post-3")
             lines = ["Il carosello delle 19 è online", "Scorri il nuovo post", "Apri @pull.radar"]
         story_art = "art/radar.jpg" if idx == 2 else card["art"]
         story_section = "DAL PROFILO" if idx == 2 else "MERCATO GCC"
         canvas(story_art, label, lines, p, story=True, section=story_section,
-               note="Grafica originale PullRadar" if idx == 2 else None)
+               note="Grafica originale PullRadar" if idx == 2 else None,
+               price_direction=card["direction"])
         plan.append({"key": f"story-{idx}", "type": "story", "hour": hour, "files": [p.relative_to(ROOT).as_posix()], "caption": ""})
 
     write_json(PLAN, {"version": PLAN_VERSION, "date": DAY,

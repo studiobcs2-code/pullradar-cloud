@@ -1,6 +1,6 @@
 # PullRadar cloud — mercato e notizie GCC Pokémon
 
-Automazione Instagram in italiano ospitata su GitHub Actions. Segue sette carte dei set **30° Anniversario**, **Collezione Classica del 30°**, **Caos Nascente** e **Buio Pesto**. [TCGdex](https://tcgdex.dev/rest/card) dà nome, set e numero. Dal 7 ottobre 2026 nessun prezzo europeo aggregato viene usato nei nuovi contenuti: un valore sarà mostrato solo se la fonte verifica che riguarda copie in lingua italiana della stampa indicata.
+Automazione Instagram in italiano ospitata su GitHub Actions. Segue sette carte dei set **30° Anniversario**, **Collezione Classica del 30°**, **Caos Nascente** e **Buio Pesto**. [TCGdex](https://tcgdex.dev/rest/card) dà nome, set e numero. [CardTrader](https://www.cardtrader.com/it/docs/api/full/reference) fornisce offerte filtrate per lingua italiana e stampa. Il valore mostrato è la media delle cinque offerte italiane Near Mint meno care, senza spedizione: è un prezzo richiesto, non una vendita conclusa.
 
 Le grafiche pubblicate mostrano illustrazioni originali o dettagli elaborati delle carte, senza riprodurre una carta completa. Il carosello su **Mega Golisopod-ex** del 7 ottobre 2026 usa un dettaglio ricavato dalle immagini italiane fornite dall'utente. Le scansioni integrali non sono caricate nel repository né pubblicate.
 
@@ -12,7 +12,7 @@ Il carosello delle 09:00 segue sempre una chase card. Gli altri due scelgono tra
 
 ## Fonti e controlli editoriali
 
-- **Mercato italiano:** sette carte di `cards.json`. La guida pubblica Cardmarket aggrega le lingue, quindi non è una fonte valida per il prezzo italiano. Finché non è disponibile una fonte automatica gratuita che distingue lingua, stampa e condizione, il flusso omette prezzi e variazioni. I vecchi dati aggregati in `snapshots.json` restano storici e non vengono riutilizzati.
+- **Mercato italiano:** sette carte di `cards.json`. CardTrader filtra `language=it`; il programma ricontrolla `pokemon_language=it`, `condition=Near Mint`, identificativo della stampa e valuta EUR. Richiede almeno cinque offerte valide. `snapshots.json` conserva il dato quotidiano e confronta solo la stessa metrica. La prima rilevazione mostra “precedente: prima rilevazione”; dal secondo giorno il nuovo prezzo diventa verde se sale e rosso se scende. I vecchi dati europei aggregati non sono usati nel confronto. Se mancano il token o almeno tre carte con prezzi verificati, la programmazione si ferma invece di pubblicare prezzi generici.
 - **Più cercate:** [Google Trends](https://trends.google.com/trends/explore) confronta fino a cinque query del tipo `nome pokemon card` su scala mondiale negli ultimi sette giorni. L'indice è relativo a quelle query: non è una classifica di tutte le carte né un numero assoluto di ricerche. Se Trends non risponde, il format viene omesso.
 - **Annunci ufficiali:** lettura della [pagina prodotti giapponese](https://www.pokemon-card.com/info/) con data, titolo e link; l'anteprima ufficiale di [Dominio Delta](https://www.pokemon.com/us/features/sneak-a-peek-at-cards-from-the-mega-evolution-delta-reign-expansion) del 5 ottobre è inclusa come evento datato e scade automaticamente.
 - **Giappone e indiscrezioni:** titoli recenti di [PokéBeach](https://www.pokebeach.com/) con link diretto. Le indiscrezioni sono marcate **non confermate**; nessun dettaglio oltre il titolo viene presentato come fatto. Tutte le notizie hanno una finestra massima di quattro giorni e sono citate nelle didascalie.
@@ -22,6 +22,7 @@ Il passaggio `Read Instagram insights` prova a leggere metriche dei post inviati
 ## Configurazione
 
 - Secret Actions `BUFFER_API_KEY`: chiave Buffer personale.
+- Secret Actions `CARDTRADER_API_TOKEN`: token CardTrader dell'account, usato solo per leggere catalogo e offerte.
 - Variable Actions `BUFFER_CHANNEL_ID`: ID del canale Instagram collegato.
 - Repository pubblico, così Buffer può scaricare le immagini create dal flusso.
 
