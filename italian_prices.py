@@ -72,23 +72,16 @@ def italian_nm_price(blueprint_id, token):
         price = offer.get("price") or {}
         if (offer.get("blueprint_id") != blueprint_id or props.get("pokemon_language") != "it"
                 or props.get("condition") != "Near Mint" or offer.get("graded")
-                or offer.get("on_vacation") or offer.get("bundle_size") != 1
+                or offer.get("on_vacation") or offer.get("bundle_size", 1) != 1
                 or price.get("currency") != "EUR" or not isinstance(price.get("cents"), int)
                 or price["cents"] <= 0):
             continue
         prices.append(price["cents"])
     prices.sort()
     if len(prices) < 5:
-        languages = sorted({str((offer.get("properties_hash") or {}).get("pokemon_language")) for offer in offers})
-        conditions = sorted({str((offer.get("properties_hash") or {}).get("condition")) for offer in offers})
-        currencies = sorted({str((offer.get("price") or {}).get("currency")) for offer in offers})
-        bundles = sorted({str(offer.get("bundle_size")) for offer in offers})
-        blueprint_types = sorted({str(type(offer.get("blueprint_id")).__name__) for offer in offers})
         raise ValueError(
             f"Meno di cinque offerte italiane Near Mint per blueprint {blueprint_id}: "
-            f"{len(prices)} idonee su {len(offers)} restituite; "
-            f"lingue={languages}, condizioni={conditions}, valute={currencies}, "
-            f"bundle={bundles}, blueprint_type={blueprint_types}"
+            f"{len(prices)} idonee su {len(offers)} restituite"
         )
     return round(mean(prices[:5]) / 100, 2), len(prices)
 
