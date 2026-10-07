@@ -266,7 +266,7 @@ def prepare():
             "RICERCHE" if format_name == "ricerche" else "MERCATO GCC")
         for slide, (slide_title, lines) in enumerate(slides, 1):
             p = PUBLIC / f"post-{number}-{slide}.jpg"
-            artwork = art_override if art_override and slide < 3 else card["art"]
+            artwork = (art_override or card["art"]) if slide == 1 else ("art/radar.jpg" if slide == 2 else "art/market-grid.jpg")
             canvas(artwork, slide_title, lines, p, section=section)
             files.append(p.relative_to(ROOT).as_posix())
         item = {"key": f"post-{number}", "type": "post", "hour": hour, "files": files,
