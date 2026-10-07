@@ -38,10 +38,9 @@ def catalog_rows(data):
 
 
 def resolve_blueprints(configs, token):
-    games = catalog_rows(get_json("/games", token))
-    pokemon_ids = {game["id"] for game in games if "pokemon" in game.get("name", "").lower()}
-    if not pokemon_ids:
-        raise ValueError("Gioco Pokémon assente dal catalogo CardTrader")
+    # CardTrader's documented Pokémon game ID is stable even when /games is
+    # returned as a keyed object instead of the documented array.
+    pokemon_ids = {5}
     expansions = catalog_rows(get_json("/expansions", token))
     relevant = []
     for expansion in expansions:
