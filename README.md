@@ -2,7 +2,7 @@
 
 Automazione Instagram in italiano ospitata su GitHub Actions. Segue sette carte dei set **30° Anniversario**, **Collezione Classica del 30°**, **Caos Nascente** e **Buio Pesto**. La [guida prezzi Cardmarket](https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json) dà il trend in euro e l'ora dell'aggiornamento; [TCGdex](https://tcgdex.dev/rest/card) dà nome, set e numero. Il trend UE non è il prezzo di una carta italiana specifica.
 
-Le immagini pubblicate sono illustrazioni originali dei soggetti, senza bordo o testo della carta. Le gallerie italiane e le immagini di **Dominio Delta** fornite dall'utente sono servite a verificare soggetti, nomi e contesto; le scansioni integrali non sono caricate nel repository né pubblicate.
+Le grafiche pubblicate mostrano illustrazioni originali o dettagli elaborati delle carte, senza riprodurre una carta completa. Il carosello su **Mega Golisopod-ex** del 7 ottobre 2026 usa un dettaglio ricavato dalle immagini italiane fornite dall'utente. Le scansioni integrali non sono caricate nel repository né pubblicate.
 
 ## Programmazione
 
