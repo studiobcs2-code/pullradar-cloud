@@ -26,5 +26,45 @@
       "value": 53.51,
       "source_updated": "07/10/2026 02:49"
     }
+  ],
+  "30th-152": [
+    {
+      "date": "2026-10-07",
+      "metric": "cardmarket.trend",
+      "value": 99.21,
+      "source_updated": "07/10/2026 02:49"
+    }
+  ],
+  "30th-154": [
+    {
+      "date": "2026-10-07",
+      "metric": "cardmarket.trend",
+      "value": 74.8,
+      "source_updated": "07/10/2026 02:49"
+    }
+  ],
+  "30th-c-001": [
+    {
+      "date": "2026-10-07",
+      "metric": "cardmarket.trend",
+      "value": 177.6,
+      "source_updated": "07/10/2026 02:49"
+    }
+  ],
+  "me04-116": [
+    {
+      "date": "2026-10-07",
+      "metric": "cardmarket.trend",
+      "value": 125.5,
+      "source_updated": "07/10/2026 02:49"
+    }
+  ],
+  "me05-116": [
+    {
+      "date": "2026-10-07",
+      "metric": "cardmarket.trend",
+      "value": 181.91,
+      "source_updated": "07/10/2026 02:49"
+    }
   ]
 }
