@@ -15,3 +15,9 @@ jobs:
         env:
           CARDTRADER_API_TOKEN: ${{ secrets.CARDTRADER_API_TOKEN }}
         run: python italian_prices.py
+      - name: Check live content and distinct carousel slides
+        env:
+          CARDTRADER_API_TOKEN: ${{ secrets.CARDTRADER_API_TOKEN }}
+        run: |
+          pip install -r requirements.txt
+          python verify_content.py
