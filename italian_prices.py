@@ -26,12 +26,23 @@ def get_json(path, token):
         return json.load(response)
 
 
+def catalog_rows(data):
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in ("data", "games", "expansions", "blueprints"):
+            if key in data:
+                return catalog_rows(data[key])
+        return [value for value in data.values() if isinstance(value, dict)]
+    raise ValueError("Formato catalogo CardTrader non riconosciuto")
+
+
 def resolve_blueprints(configs, token):
-    games = get_json("/games", token)
-    pokemon_ids = {game["id"] for game in games if "pokemon" in game["name"].lower()}
+    games = catalog_rows(get_json("/games", token))
+    pokemon_ids = {game["id"] for game in games if "pokemon" in game.get("name", "").lower()}
     if not pokemon_ids:
         raise ValueError("Gioco Pokémon assente dal catalogo CardTrader")
-    expansions = get_json("/expansions", token)
+    expansions = catalog_rows(get_json("/expansions", token))
     relevant = []
     for expansion in expansions:
         if expansion.get("game_id") not in pokemon_ids:
@@ -42,7 +53,7 @@ def resolve_blueprints(configs, token):
     wanted = {int(cfg["idProduct"]) for cfg in configs}
     found = {}
     for expansion in relevant:
-        rows = get_json("/blueprints/export?" + urllib.parse.urlencode({"expansion_id": expansion["id"]}), token)
+        rows = catalog_rows(get_json("/blueprints/export?" + urllib.parse.urlencode({"expansion_id": expansion["id"]}), token))
         for row in rows:
             if row.get("game_id") not in pokemon_ids:
                 continue
