@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "date": "2026-10-07",
   "source": "live",
   "cards": [
@@ -118,10 +119,10 @@
         "public/2026-10-07/post-2-2.jpg",
         "public/2026-10-07/post-2-3.jpg"
       ],
-      "caption": "🔎 Quali nomi di carte Pokémon sono più cercati nel mondo tra i 5 monitorati? Google Trends, ultimi 7 giorni: Pikachu 48.9, Charizard 34.2, Mew 27.3, Gengar 13.9, Greninja 4.3. Indice relativo medio, non numero assoluto di ricerche e non classifica di tutte le carte. Rilevazione 2026-10-07T04:00:00+00:00 UTC. Mercato separato: Pikachu-ex trend UE € 48.97, Cardmarket 07/10/2026 02:49 Roma. Illustrazione originale. Fonte: https://trends.google.com/trends/explore?date=now%207-d #PokemonTCG #PullRadar #GoogleTrends",
-      "format": "ricerche",
-      "title": "Ricerche globali",
-      "art": "art/pikachu.png"
+      "caption": "📡 Charizard · Collzione Classica del 30° #001/?: trend € 177.60. Variazione: storico non disponibile. Cardmarket, aggiornato 07/10/2026 02:49 (Roma). Dato indicativo UE, non prezzo di una copia italiana specifica. Illustrazione originale ispirata al soggetto, non scansione della carta. Scheda: https://api.tcgdex.net/v2/it/cards/30th-c-001\n#PokemonTCG #PullRadar #ChaseCards",
+      "format": "mercato",
+      "title": "Charizard 001/?",
+      "art": "art/charizard.png"
     },
     {
       "key": "post-3",
