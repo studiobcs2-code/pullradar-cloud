@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -24,10 +24,8 @@ DAY = NOW.date().isoformat()
 PUBLIC = ROOT / "public" / DAY
 STATE = ROOT / "state.json"
 PLAN = ROOT / "plan.json"
-SNAPSHOTS = ROOT / "snapshots.json"
 INSIGHTS = ROOT / "insights.json"
 API = "https://api.tcgdex.net/v2/it/cards/"
-PRICE_GUIDE = "https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json"
 BUFFER = "https://api.buffer.com"
 PLAN_VERSION = 2
 
@@ -38,28 +36,6 @@ def write_json(path, value):
 
 def read_json(path, fallback):
     return json.loads(path.read_text()) if path.exists() else fallback
-
-
-def price_change(card, history):
-    """Compare only the same Cardmarket trend metric for the same card."""
-    previous = [x for x in history.get(card["id"], []) if x.get("date", "") < DAY
-                and x.get("metric") == "cardmarket.trend" and isinstance(x.get("value"), (int, float))
-                and x["value"] > 0]
-    if not previous:
-        return "Variazione: storico non disponibile"
-    latest = max(previous, key=lambda x: x["date"])
-    old = latest["value"]
-    pct = (card["trend"] / old - 1) * 100
-    return f"Variazione vs {latest['date']}: {pct:+.1f}%"
-
-
-def record_prices(cards, history):
-    for card in cards:
-        rows = [x for x in history.get(card["id"], []) if x.get("date") != DAY]
-        rows.append({"date": DAY, "metric": "cardmarket.trend", "value": card["trend"],
-                     "source_updated": card["updated"]})
-        history[card["id"]] = rows[-60:]
-    write_json(SNAPSHOTS, history)
 
 
 def buffer_query(key, query):
@@ -117,22 +93,7 @@ def font(size, bold=False):
     return ImageFont.load_default()
 
 
-def fetch_price_guide():
-    request = urllib.request.Request(PRICE_GUIDE, headers={"User-Agent": "PullRadar/1.0"})
-    with urllib.request.urlopen(request, timeout=35) as response:
-        guide = json.load(response)
-    stamp = guide.get("createdAt")
-    if not stamp:
-        raise ValueError("Guida Cardmarket senza data")
-    updated = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S%z")
-    age = NOW.astimezone(timezone.utc) - updated.astimezone(timezone.utc)
-    if age < timedelta(minutes=-15) or age > timedelta(hours=48):
-        raise ValueError(f"Guida Cardmarket fuori finestra di aggiornamento: {stamp}")
-    rows = {row["idProduct"]: row for row in guide.get("priceGuides", [])}
-    return rows, updated
-
-
-def fetch_card(card_id, product_id, guide):
+def fetch_card(card_id):
     fixture = os.environ.get("PULLRADAR_TEST_FIXTURE")
     if fixture:
         card = read_json(Path(fixture), {})[card_id]
@@ -143,27 +104,13 @@ def fetch_card(card_id, product_id, guide):
             card = json.load(response)
     if card.get("id") != card_id or not card.get("name") or not card.get("set", {}).get("name"):
         raise ValueError(f"Scheda incompleta: {card_id}")
-    if fixture:
-        price = (card.get("pricing") or {}).get("cardmarket") or {}
-        updated = datetime.fromisoformat(price["updated"].replace("Z", "+00:00"))
-    else:
-        rows, updated = guide
-        price = rows.get(product_id)
-    if not price:
-        raise ValueError(f"Prodotto assente nella guida Cardmarket: {product_id}")
-    # Use the same published metric for all cards. It describes EU marketplace
-    # prices, not Italian-language transactions or a specific condition.
-    value = price.get("trend")
-    if not isinstance(value, (int, float)) or value <= 0:
-        raise ValueError(f"Trend Cardmarket non disponibile: {card_id}")
     return {
         "id": card_id,
         "name": card["name"],
         "set": card["set"]["name"],
         "setSize": (card["set"].get("cardCount") or {}).get("official") or "?",
         "localId": card.get("localId", ""),
-        "trend": round(float(value), 2),
-        "updated": updated.astimezone(ROME).strftime("%d/%m/%Y %H:%M"),
+        "updated": NOW.strftime("%d/%m/%Y %H:%M"),
         "url": API + card_id,
     }
 
@@ -227,13 +174,12 @@ def prepare():
         return
 
     cards_cfg = read_json(ROOT / "cards.json", [])
-    guide = fetch_price_guide() if not os.environ.get("PULLRADAR_TEST_FIXTURE") else None
     cards = []
     for cfg in cards_cfg:
         if not (ROOT / cfg["art"]).exists():
             raise FileNotFoundError(cfg["art"])
         try:
-            item = fetch_card(cfg["id"], cfg["idProduct"], guide)
+            item = fetch_card(cfg["id"])
         except (ValueError, KeyError, OSError) as error:
             print("Carta esclusa per dati incompleti:", cfg["id"], error)
             continue
@@ -241,12 +187,7 @@ def prepare():
         item["query"] = cfg.get("query", "")
         cards.append(item)
     if len(cards) < 3:
-        raise ValueError("Servono almeno tre schede con prezzo aggiornato")
-
-    history = read_json(SNAPSHOTS, {})
-    for card in cards:
-        card["change"] = price_change(card, history)
-    record_prices(cards, history)
+        raise ValueError("Servono almeno tre schede verificate")
 
     rotation = NOW.date().toordinal() % len(cards)
     ordered = cards[rotation:] + cards[:rotation]
@@ -278,15 +219,14 @@ def prepare():
     def market_post(number, hour, card):
         number_label = f"{card['localId']}/{card['setSize']}"
         slides = [
-            ("CHASE CARD", [card["name"], card["set"], f"Carta {number_label}", f"Trend UE € {card['trend']:.2f}"]),
-            ("ANDAMENTO", [card["name"] + " · " + number_label, card["change"],
-                            f"Trend Cardmarket € {card['trend']:.2f}", f"Aggiornato {card['updated']} Roma"]),
-            ("COME LEGGERLO", ["Prezzo indicativo mercato UE", "Non è una vendita conclusa",
-                                "Lingua e stato cambiano il valore", f"Fonte {card['updated']} Roma"]),
+            ("CHASE CARD", [card["name"], card["set"], f"Carta {number_label}", "Edizione italiana sotto radar"]),
+            ("MERCATO ITALIANO", [card["name"] + " · " + number_label,
+                                  "Prezzo italiano non verificato", "Monitoraggio in corso"]),
+            ("COME LEGGERLO", ["Confrontiamo solo copie italiane", "Stessa stampa e condizioni comparabili",
+                                "Nessun valore UE usato come prezzo IT"]),
         ]
-        caption = (f"📡 {card['name']} · {card['set']} #{number_label}: trend € {card['trend']:.2f}. "
-                   f"{card['change']}. Cardmarket, aggiornato {card['updated']} (Roma). "
-                   "Dato indicativo UE, non prezzo di una copia italiana specifica. "
+        caption = (f"📡 {card['name']} · {card['set']} #{number_label}. "
+                   "Prezzo delle copie italiane non ancora verificato: nessun valore generico europeo viene mostrato. "
                    "Illustrazione originale ispirata al soggetto, non scansione della carta. "
                    f"Scheda: {card['url']}\n#PokemonTCG #PullRadar #ChaseCards")
         add_post(number, hour, card, card["name"] + " " + number_label, slides, caption, "mercato")
@@ -313,9 +253,8 @@ def prepare():
             (label, [event["title"], f"Fonte: {event['source']}", f"Pubblicato: {event['published']}"]),
             ("COSA SAPPIAMO", [event.get("detail", "Titolo sintetizzato dalla fonte"), status,
                                 "Apri il link nella didascalia", closing]),
-            ("MERCATO OGGI", [f"{card['name']} · {card['set']}",
-                              f"Trend UE € {card['trend']:.2f}", f"Cardmarket {card['updated']} Roma",
-                              "Dato separato dalla notizia"]),
+            ("CARTA SOTTO RADAR", [f"{card['name']} · {card['set']}",
+                                   "Prezzi: solo copie in italiano", "Valore non verificato: omesso"]),
         ]
         prefix = ("⚠️ Indiscrezione non confermata." if event["kind"] == "indiscrezione" else
                   "📣 Annuncio ufficiale Pokémon." if event["kind"] == "ufficiale" else
@@ -325,8 +264,8 @@ def prepare():
                    f"Fonte: {event['source']}, {event['published']}. {event['url']}\n" +
                    (event.get("detail", "") + ". " if event.get("detail") else "") +
                    "Il carosello riporta il titolo della fonte; verifica i dettagli nell'articolo. "
-                   f"Dato mercato separato: {card['name']} trend UE € {card['trend']:.2f}, "
-                   f"Cardmarket {card['updated']} Roma. Illustrazione originale, non scansione. "
+                   "Nessun prezzo pubblicato senza una rilevazione riferita a copie italiane. "
+                   "Illustrazione originale, non scansione. "
                    "#PokemonTCG #PullRadar #PokemonNews")
         add_post(number, hour, card, event["title"], slides, caption, event["kind"], event["url"], event.get("art"))
 
@@ -341,16 +280,14 @@ def prepare():
             ("COME SI MISURA", ["Query: nome + pokemon card", "Indice Google Trends relativo",
                                 "Non è numero di ricerche", "Non identifica una stampa precisa"]),
             ("CARTA IN EVIDENZA", [f"{card['name']} · {card['set']}",
-                                    f"Trend UE € {card['trend']:.2f}", f"Cardmarket {card['updated']} Roma",
-                                    "Prezzo distinto dall'indice ricerca"]),
+                                    "Prezzo italiano non verificato", "Ricerche e prezzi sono dati distinti"]),
         ]
         listed = ", ".join(f"{name(q)} {score:.1f}" for q, score in ranking["scores"])
         caption = (f"🔎 Quali nomi di carte Pokémon sono più cercati nel mondo tra i {ranking['query_count']} monitorati? "
                    f"Google Trends, ultimi 7 giorni: {listed}. "
                    "Indice relativo medio, non numero assoluto di ricerche e non classifica di tutte le carte. "
                    f"Rilevazione {ranking['updated']} UTC. "
-                   f"Mercato separato: {card['name']} trend UE € {card['trend']:.2f}, "
-                   f"Cardmarket {card['updated']} Roma. Illustrazione originale. "
+                   "Prezzi omessi finché non sono verificati per copie italiane. Illustrazione originale. "
                    "Fonte: https://trends.google.com/trends/explore?date=now%207-d "
                    "#PokemonTCG #PullRadar #GoogleTrends")
         add_post(number, hour, card, "Ricerche globali", slides, caption, "ricerche")
@@ -374,8 +311,8 @@ def prepare():
     for idx, (hour, card, label) in enumerate([(11, a, "IL DATO DEL GIORNO"),
                                                (20, c, "NUOVO POST SUL PROFILO")], 1):
         p = PUBLIC / f"story-{idx}.jpg"
-        lines = [f"{card['name']} · € {card['trend']:.2f}", "Trend Cardmarket UE",
-                 f"Aggiornato: {card['updated']}"]
+        lines = [card['name'], "Prezzi: solo copie italiane",
+                 "Valore non verificato: omesso"]
         if idx == 2:
             post3 = next(item for item in plan if item["key"] == "post-3")
             lines = ["Il carosello delle 19 è online", "Scorri il nuovo post", "Apri @pull.radar"]
