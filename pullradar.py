@@ -14,6 +14,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFont
+from editorial import global_search_ranking, news_candidates
 
 
 ROOT = Path(__file__).resolve().parent
@@ -83,7 +84,7 @@ def read_insights():
              ",filter:{status:[sent],channelIds:[" + json.dumps(channel) +
              "]}}) { edges { node { id text metricsUpdatedAt metrics { type value } } } } }")
     data = buffer_query(key, query)
-    scores = {"30th-149": [], "30th-150": []}
+    scores = {card["id"]: [] for card in read_json(ROOT / "cards.json", [])}
     for edge in (data.get("posts") or {}).get("edges") or []:
         post = edge.get("node") or {}
         metrics = {m["type"]: m["value"] for m in post.get("metrics") or []}
@@ -95,8 +96,9 @@ def read_insights():
                 engagement = sum(metrics.get(k, 0) for k in ("saves", "shares", "comments"))
                 scores[card_id].append((engagement + 1) / (denominator + 30))
     choice = None
-    if all(len(values) >= 3 for values in scores.values()):
-        choice = max(scores, key=lambda cid: sum(scores[cid]) / len(scores[cid]))
+    eligible = {cid: values for cid, values in scores.items() if len(values) >= 3}
+    if eligible:
+        choice = max(eligible, key=lambda cid: sum(eligible[cid]) / len(eligible[cid]))
     write_json(INSIGHTS, {"date": DAY, "preferred_card_id": choice,
                           "sample_count": {cid: len(values) for cid, values in scores.items()}})
     print("Insight Buffer letti; priorità editoriale:", choice or "rotazione neutra")
@@ -157,6 +159,7 @@ def fetch_card(card_id, product_id, guide):
         "id": card_id,
         "name": card["name"],
         "set": card["set"]["name"],
+        "setSize": (card["set"].get("cardCount") or {}).get("official") or "?",
         "localId": card.get("localId", ""),
         "trend": round(float(value), 2),
         "updated": updated.astimezone(ROME).strftime("%d/%m/%Y %H:%M"),
@@ -168,7 +171,7 @@ def text(draw, xy, value, size=44, fill="white", bold=False):
     draw.text(xy, value, font=font(size, bold), fill=fill, stroke_width=0)
 
 
-def canvas(art_path, title, lines, out, story=False):
+def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC"):
     size = (1080, 1920) if story else (1080, 1350)
     im = Image.new("RGB", size, "#071522")
     art = Image.open(ROOT / art_path).convert("RGB")
@@ -179,86 +182,205 @@ def canvas(art_path, title, lines, out, story=False):
     im.paste(art, (x, 110))
     overlay = Image.new("RGBA", size, (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
-    footer_y = 1130 if story else 830
+    footer_y = 1130 if story else 800
     od.rectangle((0, 0, 1080, 164), fill=(4, 15, 27, 235))
     od.rectangle((0, footer_y, 1080, size[1]), fill=(4, 15, 27, 235))
     im = Image.alpha_composite(im.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(im)
-    text(draw, (62, 47), "PULLRADAR  /  MERCATO GCC", 35, "#67e7ed", True)
-    text(draw, (60, footer_y + 55), title[:28], 58, "#ffffff", True)
-    y = footer_y + 145
-    for line in lines:
-        text(draw, (62, y), line[:44], 40, "#dce9ed")
-        y += 64
+    text(draw, (62, 47), "PULLRADAR  /  " + section, 35, "#67e7ed", True)
+    text(draw, (60, footer_y + 55), title[:30], 53, "#ffffff", True)
+    y = footer_y + 140
     note_y = size[1] - 102
-    text(draw, (62, note_y), "Fan art originale · non immagine della carta", 24, "#9fb6c5")
+    max_width = 956
+    for line in lines:
+        words = str(line).split()
+        chunks, current = [], ""
+        for word in words:
+            proposed = (current + " " + word).strip()
+            if draw.textbbox((0, 0), proposed, font=font(36))[2] > max_width and current:
+                chunks.append(current)
+                current = word
+            else:
+                current = proposed
+        if current:
+            chunks.append(current)
+        for chunk in chunks[:2]:
+            if y > note_y - 53:
+                break
+            text(draw, (62, y), chunk, 36, "#dce9ed")
+            y += 53
+        y += 7
+    text(draw, (62, note_y), "Illustrazione originale · non immagine della carta", 23, "#9fb6c5")
     out.parent.mkdir(parents=True, exist_ok=True)
     im.save(out, "JPEG", quality=86, optimize=True)
 
 
 def prepare():
+    existing = read_json(PLAN, {})
+    if (not os.environ.get("PULLRADAR_TEST_FIXTURE")
+            and existing.get("date") == DAY and existing.get("source") == "live"
+            and existing.get("items")
+            and all((ROOT / file).exists() for item in existing["items"] for file in item["files"])):
+        print("Piano odierno già pronto; riuso i contenuti per la storia serale")
+        return
+
     cards_cfg = read_json(ROOT / "cards.json", [])
     guide = fetch_price_guide() if not os.environ.get("PULLRADAR_TEST_FIXTURE") else None
     cards = []
     for cfg in cards_cfg:
         if not (ROOT / cfg["art"]).exists():
             raise FileNotFoundError(cfg["art"])
-        item = fetch_card(cfg["id"], cfg["idProduct"], guide)
+        try:
+            item = fetch_card(cfg["id"], cfg["idProduct"], guide)
+        except (ValueError, KeyError, OSError) as error:
+            print("Carta esclusa per dati incompleti:", cfg["id"], error)
+            continue
         item["art"] = cfg["art"]
+        item["query"] = cfg.get("query", "")
         cards.append(item)
-    if len(cards) != 2:
-        raise ValueError("Servono due schede valide per il pilota")
+    if len(cards) < 3:
+        raise ValueError("Servono almeno tre schede con prezzo aggiornato")
 
-    a, b = cards
-    insight = read_json(INSIGHTS, {})
-    if insight.get("date") == DAY and insight.get("preferred_card_id") == b["id"]:
-        a, b = b, a
     history = read_json(SNAPSHOTS, {})
-    a["change"] = price_change(a, history)
-    b["change"] = price_change(b, history)
+    for card in cards:
+        card["change"] = price_change(card, history)
     record_prices(cards, history)
+
+    rotation = NOW.date().toordinal() % len(cards)
+    ordered = cards[rotation:] + cards[:rotation]
+    insight = read_json(INSIGHTS, {})
+    preferred = insight.get("preferred_card_id") if insight.get("date") == DAY else None
+    if preferred:
+        ordered.sort(key=lambda card: card["id"] != preferred)
+    a, b, c = ordered[:3]
     s = read_json(STATE, {"scheduled": {}})
     write_json(STATE, s)
 
-    # Two distinct anniversary cards and a same-metric comparison.
-    posts = [
-        ("prima-variante", a, [f"30° Anniversario · {a['localId']}/128", "Trend Cardmarket UE", f"€ {a['trend']:.2f}", a["change"], f"Aggiornato: {a['updated']}"]),
-        ("seconda-variante", b, [f"30° Anniversario · {b['localId']}/128", "Trend Cardmarket UE", f"€ {b['trend']:.2f}", b["change"], f"Aggiornato: {b['updated']}"]),
-        ("confronto", a, [f"Pikachu-ex: {a['localId']} vs {b['localId']}", f"{a['localId']}/128: € {a['trend']:.2f}", f"{b['localId']}/128: € {b['trend']:.2f}", "Stessa metrica: trend UE", f"Aggiornato: {a['updated']}"]),
-    ]
     plan = []
-    for idx, (slug, c, lines) in enumerate(posts, 1):
-        files = []
-        for slide in range(1, 4):
-            p = PUBLIC / f"post-{idx}-{slide}.jpg"
-            if slide == 1:
-                content = lines[:3]
-            elif slide == 2:
-                content = [lines[0], lines[1], lines[3], lines[4]]
-            else:
-                content = ["Come leggere il dato", "Trend di mercato UE", "Lingua e stato incidono sul prezzo", "Controlla le vendite concluse", f"Fonte aggiornata: {c['updated']}"]
-            canvas(c["art"], c["name"] if idx < 3 else "Confronto del giorno", content, p)
-            files.append(p.relative_to(ROOT).as_posix())
-        subject = (f"{c['name']} — {c['set']} #{c['localId']}: € {c['trend']:.2f}"
-                   if idx < 3 else
-                   f"Pikachu-ex {a['localId']}/128 € {a['trend']:.2f} / {b['localId']}/128 € {b['trend']:.2f}")
-        change_note = c["change"] if idx < 3 else "Due varianti dello stesso set; il trend non è una vendita conclusa"
-        caption = (
-            f"📡 {subject}\nTrend Cardmarket indicativo UE. "
-            f"Fonte: TCGdex / Cardmarket, aggiornamento {c['updated']} (Roma). "
-            f"{change_note}. "
-            "Il dato non identifica lingua, stato o prezzo di vendita della tua copia. "
-            "Illustrazione originale del soggetto, non immagine della carta. "
-            f"Scheda: {c['url']}\n#PokemonTCG #PullRadar #ChaseCards"
-        )
-        plan.append({"key": f"post-{idx}", "type": "post", "hour": [9, 13, 19][idx-1], "files": files, "caption": caption})
 
-    for idx, (hour, c, label) in enumerate([(11, a, "IL DATO DEL GIORNO"), (20, b, "NUOVO POST SUL PROFILO")], 1):
+    def add_post(number, hour, card, title, slides, caption, format_name, event_url=None, art_override=None):
+        files = []
+        section = "NEWS GCC" if format_name in ("ufficiale", "giappone", "novita_set", "indiscrezione") else (
+            "RICERCHE" if format_name == "ricerche" else "MERCATO GCC")
+        for slide, (slide_title, lines) in enumerate(slides, 1):
+            p = PUBLIC / f"post-{number}-{slide}.jpg"
+            artwork = art_override if art_override and slide < 3 else card["art"]
+            canvas(artwork, slide_title, lines, p, section=section)
+            files.append(p.relative_to(ROOT).as_posix())
+        item = {"key": f"post-{number}", "type": "post", "hour": hour, "files": files,
+                "caption": caption, "format": format_name, "title": title, "art": art_override or card["art"]}
+        if event_url:
+            item["event_url"] = event_url
+        plan.append(item)
+
+    def market_post(number, hour, card):
+        number_label = f"{card['localId']}/{card['setSize']}"
+        slides = [
+            ("CHASE CARD", [card["name"], card["set"], f"Carta {number_label}", f"Trend UE € {card['trend']:.2f}"]),
+            ("ANDAMENTO", [card["name"] + " · " + number_label, card["change"],
+                            f"Trend Cardmarket € {card['trend']:.2f}", f"Aggiornato {card['updated']} Roma"]),
+            ("COME LEGGERLO", ["Prezzo indicativo mercato UE", "Non è una vendita conclusa",
+                                "Lingua e stato cambiano il valore", f"Fonte {card['updated']} Roma"]),
+        ]
+        caption = (f"📡 {card['name']} · {card['set']} #{number_label}: trend € {card['trend']:.2f}. "
+                   f"{card['change']}. Cardmarket, aggiornato {card['updated']} (Roma). "
+                   "Dato indicativo UE, non prezzo di una copia italiana specifica. "
+                   "Illustrazione originale ispirata al soggetto, non scansione della carta. "
+                   f"Scheda: {card['url']}\n#PokemonTCG #PullRadar #ChaseCards")
+        add_post(number, hour, card, card["name"] + " " + number_label, slides, caption, "mercato")
+
+    market_post(1, 9, a)
+
+    ranking = None
+    if not os.environ.get("PULLRADAR_TEST_FIXTURE"):
+        try:
+            ranking = global_search_ranking(cards)
+        except Exception as error:
+            print("Google Trends non disponibile; classifica omessa:", type(error).__name__, error)
+
+    seen = s.get("covered_events", {})
+    candidates = [] if os.environ.get("PULLRADAR_TEST_FIXTURE") else news_candidates(NOW)
+    news = [event for event in candidates if event["url"] not in seen][:2]
+
+    def news_post(number, hour, event, card):
+        label = {"ufficiale": "ANNUNCIO UFFICIALE", "giappone": "NEWS DAL GIAPPONE",
+                 "novita_set": "NEWS NUOVO SET", "indiscrezione": "INDISCREZIONE"}[event["kind"]]
+        status = "NON CONFERMATA" if event["kind"] == "indiscrezione" else "Fonte datata e verificata"
+        closing = "Dettagli nella fonte ufficiale" if event.get("detail") else "Nessuna uscita dedotta dal titolo"
+        slides = [
+            (label, [event["title"], f"Fonte: {event['source']}", f"Pubblicato: {event['published']}"]),
+            ("COSA SAPPIAMO", [event.get("detail", "Titolo sintetizzato dalla fonte"), status,
+                                "Apri il link nella didascalia", closing]),
+            ("MERCATO OGGI", [f"{card['name']} · {card['set']}",
+                              f"Trend UE € {card['trend']:.2f}", f"Cardmarket {card['updated']} Roma",
+                              "Dato separato dalla notizia"]),
+        ]
+        prefix = ("⚠️ Indiscrezione non confermata." if event["kind"] == "indiscrezione" else
+                  "📣 Annuncio ufficiale Pokémon." if event["kind"] == "ufficiale" else
+                  "🇯🇵 Notizia dal Giappone." if event["kind"] == "giappone" else
+                  "📰 Novità su un nuovo set riportata da PokéBeach.")
+        caption = (f"{prefix} {event['title']}\nTitolo originale: {event['original']}\n"
+                   f"Fonte: {event['source']}, {event['published']}. {event['url']}\n" +
+                   (event.get("detail", "") + ". " if event.get("detail") else "") +
+                   "Il carosello riporta il titolo della fonte; verifica i dettagli nell'articolo. "
+                   f"Dato mercato separato: {card['name']} trend UE € {card['trend']:.2f}, "
+                   f"Cardmarket {card['updated']} Roma. Illustrazione originale, non scansione. "
+                   "#PokemonTCG #PullRadar #PokemonNews")
+        add_post(number, hour, card, event["title"], slides, caption, event["kind"], event["url"], event.get("art"))
+
+    def ranking_post(number, hour):
+        top = ranking["scores"][:3]
+        query = top[0][0]
+        card = next(card for card in cards if card["query"] == query)
+        name = lambda term: term.replace(" pokemon card", "")
+        slides = [
+            ("PIÙ CERCATE", ["Google Trends · mondo · 7 giorni", f"Tra {ranking['query_count']} ricerche monitorate",
+                              *[f"{pos}. {name(q)} · indice {score:.1f}" for pos, (q, score) in enumerate(top, 1)]]),
+            ("COME SI MISURA", ["Query: nome + pokemon card", "Indice Google Trends relativo",
+                                "Non è numero di ricerche", "Non identifica una stampa precisa"]),
+            ("CARTA IN EVIDENZA", [f"{card['name']} · {card['set']}",
+                                    f"Trend UE € {card['trend']:.2f}", f"Cardmarket {card['updated']} Roma",
+                                    "Prezzo distinto dall'indice ricerca"]),
+        ]
+        listed = ", ".join(f"{name(q)} {score:.1f}" for q, score in ranking["scores"])
+        caption = (f"🔎 Quali nomi di carte Pokémon sono più cercati nel mondo tra i {ranking['query_count']} monitorati? "
+                   f"Google Trends, ultimi 7 giorni: {listed}. "
+                   "Indice relativo medio, non numero assoluto di ricerche e non classifica di tutte le carte. "
+                   f"Rilevazione {ranking['updated']} UTC. "
+                   f"Mercato separato: {card['name']} trend UE € {card['trend']:.2f}, "
+                   f"Cardmarket {card['updated']} Roma. Illustrazione originale. "
+                   "Fonte: https://trends.google.com/trends/explore?date=now%207-d "
+                   "#PokemonTCG #PullRadar #GoogleTrends")
+        add_post(number, hour, card, "Ricerche globali", slides, caption, "ricerche")
+
+    if len(news) >= 2:
+        news_post(2, 13, news[0], b)
+        news_post(3, 19, news[1], c)
+    elif len(news) == 1:
+        if ranking:
+            ranking_post(2, 13)
+        else:
+            market_post(2, 13, b)
+        news_post(3, 19, news[0], c)
+    else:
+        if ranking:
+            ranking_post(2, 13)
+        else:
+            market_post(2, 13, b)
+        market_post(3, 19, c)
+
+    for idx, (hour, card, label) in enumerate([(11, a, "IL DATO DEL GIORNO"),
+                                               (20, c, "NUOVO POST SUL PROFILO")], 1):
         p = PUBLIC / f"story-{idx}.jpg"
-        lines = [f"{c['name']} · € {c['trend']:.2f}", "Trend Cardmarket UE", f"Aggiornato: {c['updated']}"]
+        lines = [f"{card['name']} · € {card['trend']:.2f}", "Trend Cardmarket UE",
+                 f"Aggiornato: {card['updated']}"]
         if idx == 2:
-            lines.insert(0, "Apri il post nel profilo @pull.radar")
-        canvas(c["art"], label, lines, p, story=True)
+            post3 = next(item for item in plan if item["key"] == "post-3")
+            lines = ["Il carosello delle 19 è online", post3["title"], "Apri @pull.radar"]
+        story_art = post3["art"] if idx == 2 else card["art"]
+        story_section = "NEWS GCC" if idx == 2 and post3["format"] in (
+            "ufficiale", "giappone", "novita_set", "indiscrezione") else "MERCATO GCC"
+        canvas(story_art, label, lines, p, story=True, section=story_section)
         plan.append({"key": f"story-{idx}", "type": "story", "hour": hour, "files": [p.relative_to(ROOT).as_posix()], "caption": ""})
 
     write_json(PLAN, {"date": DAY, "source": "fixture" if os.environ.get("PULLRADAR_TEST_FIXTURE") else "live", "cards": cards, "items": plan})
@@ -375,6 +497,8 @@ def publish():
         if not post or not post.get("id"):
             raise RuntimeError(str(payload))
         state["scheduled"][DAY][item["key"]] = post["id"]
+        if item.get("event_url"):
+            state.setdefault("covered_events", {})[item["event_url"]] = DAY
         persist_state(state)
         print(f"Programma {item['key']}: {post['id']} {post.get('dueAt')}")
 

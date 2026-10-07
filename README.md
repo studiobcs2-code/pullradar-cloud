@@ -1,14 +1,23 @@
-# PullRadar cloud — mercato Pokémon 30° anniversario
+# PullRadar cloud — mercato e notizie GCC Pokémon
 
-Automazione Instagram gratuita per due Pikachu-ex del set italiano **30° Anniversario** (`30th-149` e `30th-150`). La [guida prezzi ufficiale Cardmarket](https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json) fornisce il trend in euro e l'ora di aggiornamento; TCGdex fornisce nome, set e numero. Le immagini sono illustrazioni originali del soggetto, non scansioni delle carte. Il numero della carta e il link alla scheda dati sono sempre nella didascalia.
+Automazione Instagram in italiano ospitata su GitHub Actions. Segue sette carte dei set **30° Anniversario**, **Collezione Classica del 30°**, **Caos Nascente** e **Buio Pesto**. La [guida prezzi Cardmarket](https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json) dà il trend in euro e l'ora dell'aggiornamento; [TCGdex](https://tcgdex.dev/rest/card) dà nome, set e numero. Il trend UE non è il prezzo di una carta italiana specifica.
+
+Le immagini pubblicate sono illustrazioni originali dei soggetti, senza bordo o testo della carta. Le gallerie italiane e le immagini di **Dominio Delta** fornite dall'utente sono servite a verificare soggetti, nomi e contesto; le scansioni integrali non sono caricate nel repository né pubblicate.
 
 ## Programmazione
 
-GitHub Actions esegue il flusso alle 07:17, 19:25 e 19:35 (Europe/Rome), senza dipendere dal Mac o da questa chat. Buffer programma tre caroselli alle 09:00, 13:00 e 19:00, una storia alle 11:00 e una storia di rimando alle 20:00. La storia delle 20 viene programmata solo quando Buffer conferma che il post delle 19 è stato inviato; l'esecuzione delle 19:35 riprova se la conferma arriva in ritardo. Alle 21:15 un controllo separato verifica che Buffer riporti tutti e cinque i contenuti come inviati: un'assenza o un errore rende rossa l'esecuzione GitHub Actions. I ritardi del servizio possono far saltare uno slot.
+GitHub Actions prepara e programma alle 07:17 e riprova alle 07:37 (Europe/Rome), senza Mac o chat. Buffer riceve tre caroselli alle **09:00, 13:00 e 19:00** e due storie alle **11:00 e 20:00**. La storia delle 20 viene programmata soltanto se Buffer conferma che il carosello delle 19 è stato inviato; il flusso riprova alle 19:25 e 19:35. Alle 21:15 un controllo verifica i cinque stati e segnala un errore se manca un invio. GitHub può ritardare i flussi programmati; uno slot troppo vicino viene saltato.
 
-Lo script ferma la giornata se un prezzo manca, non è in EUR o ha più di 48 ore. `snapshots.json` conserva fino a 60 rilevazioni giornaliere per carta. La variazione compare solo dopo una rilevazione precedente della **stessa metrica**; non viene ricavata da prezzi di vendita o offerte isolate. I trend UE non rappresentano il prezzo di una specifica copia italiana.
+Il carosello delle 09:00 è sempre sul mercato. Gli altri due scelgono tra ricerche globali, annuncio ufficiale, notizia giapponese, indiscrezione e mercato. Quando non c'è una notizia recente e citabile, il sistema usa un aggiornamento di mercato; non inventa leak o lanci. Un articolo già programmato viene ricordato in `state.json` e non viene ripetuto. Il piano del giorno è salvato in `plan.json` per evitare che il tentativo serale generi contenuti diversi.
 
-Il passaggio `Read Instagram insights` prova a leggere le metriche dei post inviati. Se sono disponibili almeno tre post con visualizzazioni per ciascuna variante, mette per prima quella con il migliore rapporto tra salvataggi, condivisioni, commenti e visualizzazioni. I valori grezzi e la chiave non vengono salvati nel repository. Se l'API non dà metriche, l'ordine resta neutro e le pubblicazioni possono continuare.
+## Fonti e controlli editoriali
+
+- **Mercato:** sette carte di `cards.json`, trend Cardmarket in EUR aggiornato entro 48 ore. Se una carta manca viene esclusa; se restano meno di tre carte, il flusso si ferma. `snapshots.json` conserva fino a 60 giorni per carta e confronta soltanto la stessa metrica.
+- **Più cercate:** [Google Trends](https://trends.google.com/trends/explore) confronta fino a cinque query del tipo `nome pokemon card` su scala mondiale negli ultimi sette giorni. L'indice è relativo a quelle query: non è una classifica di tutte le carte né un numero assoluto di ricerche. Se Trends non risponde, il format viene omesso.
+- **Annunci ufficiali:** lettura della [pagina prodotti giapponese](https://www.pokemon-card.com/info/) con data, titolo e link; l'anteprima ufficiale di [Dominio Delta](https://www.pokemon.com/us/features/sneak-a-peek-at-cards-from-the-mega-evolution-delta-reign-expansion) del 5 ottobre è inclusa come evento datato e scade automaticamente.
+- **Giappone e indiscrezioni:** titoli recenti di [PokéBeach](https://www.pokebeach.com/) con link diretto. Le indiscrezioni sono marcate **non confermate**; nessun dettaglio oltre il titolo viene presentato come fatto. Tutte le notizie hanno una finestra massima di quattro giorni e sono citate nelle didascalie.
+
+Il passaggio `Read Instagram insights` prova a leggere metriche dei post inviati. Dopo almeno tre post con visualizzazioni per una carta, può darle priorità nella rotazione. Gli insight grezzi e la chiave restano fuori dal repository. Se l'API non restituisce metriche, le pubblicazioni continuano.
 
 ## Configurazione
 
@@ -16,8 +25,4 @@ Il passaggio `Read Instagram insights` prova a leggere le metriche dei post invi
 - Variable Actions `BUFFER_CHANNEL_ID`: ID del canale Instagram collegato.
 - Repository pubblico, così Buffer può scaricare le immagini create dal flusso.
 
-Il workflow verifica il canale Buffer prima di generare e programmare. I post già registrati in `state.json` non vengono creati due volte. Una prova con **Actions → PullRadar quotidiano → Run workflow** verifica credenziali, dati e generazione; un'esecuzione dopo l'ultimo slot non programma nuove uscite.
-
-## Ambito attuale
-
-Questo progetto pubblica contenuti di **mercato**. News dei set giapponesi, annunci ufficiali, leak e classifiche delle carte più cercate richiedono fonti e regole editoriali dedicate; non sono attivi qui. Nessun numero o evento di questi format viene inventato per riempire il calendario.
+Il workflow verifica il canale Buffer prima di creare media. I post già registrati in `state.json` non vengono creati due volte. **Actions → PullRadar quotidiano → Run workflow** permette una prova manuale. Uno stato `sent` di Buffer conferma l'invio secondo Buffer; la presenza effettiva su Instagram va verificata nel primo ciclo reale.
