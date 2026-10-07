@@ -29,6 +29,7 @@ INSIGHTS = ROOT / "insights.json"
 API = "https://api.tcgdex.net/v2/it/cards/"
 PRICE_GUIDE = "https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json"
 BUFFER = "https://api.buffer.com"
+PLAN_VERSION = 2
 
 
 def write_json(path, value):
@@ -171,7 +172,7 @@ def text(draw, xy, value, size=44, fill="white", bold=False):
     draw.text(xy, value, font=font(size, bold), fill=fill, stroke_width=0)
 
 
-def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC"):
+def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC", note=None):
     size = (1080, 1920) if story else (1080, 1350)
     im = Image.new("RGB", size, "#071522")
     art = Image.open(ROOT / art_path).convert("RGB")
@@ -210,7 +211,7 @@ def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC"):
             text(draw, (62, y), chunk, 36, "#dce9ed")
             y += 53
         y += 7
-    text(draw, (62, note_y), "Illustrazione originale · non immagine della carta", 23, "#9fb6c5")
+    text(draw, (62, note_y), note or "Illustrazione originale · non immagine della carta", 23, "#9fb6c5")
     out.parent.mkdir(parents=True, exist_ok=True)
     im.save(out, "JPEG", quality=86, optimize=True)
 
@@ -219,6 +220,7 @@ def prepare():
     existing = read_json(PLAN, {})
     if (not os.environ.get("PULLRADAR_TEST_FIXTURE")
             and existing.get("date") == DAY and existing.get("source") == "live"
+            and existing.get("version") == PLAN_VERSION
             and existing.get("items")
             and all((ROOT / file).exists() for item in existing["items"] for file in item["files"])):
         print("Piano odierno già pronto; riuso i contenuti per la storia serale")
@@ -376,14 +378,16 @@ def prepare():
                  f"Aggiornato: {card['updated']}"]
         if idx == 2:
             post3 = next(item for item in plan if item["key"] == "post-3")
-            lines = ["Il carosello delle 19 è online", post3["title"], "Apri @pull.radar"]
-        story_art = post3["art"] if idx == 2 else card["art"]
-        story_section = "NEWS GCC" if idx == 2 and post3["format"] in (
-            "ufficiale", "giappone", "novita_set", "indiscrezione") else "MERCATO GCC"
-        canvas(story_art, label, lines, p, story=True, section=story_section)
+            lines = ["Il carosello delle 19 è online", "Scorri il nuovo post", "Apri @pull.radar"]
+        story_art = "art/radar.jpg" if idx == 2 else card["art"]
+        story_section = "DAL PROFILO" if idx == 2 else "MERCATO GCC"
+        canvas(story_art, label, lines, p, story=True, section=story_section,
+               note="Grafica originale PullRadar" if idx == 2 else None)
         plan.append({"key": f"story-{idx}", "type": "story", "hour": hour, "files": [p.relative_to(ROOT).as_posix()], "caption": ""})
 
-    write_json(PLAN, {"date": DAY, "source": "fixture" if os.environ.get("PULLRADAR_TEST_FIXTURE") else "live", "cards": cards, "items": plan})
+    write_json(PLAN, {"version": PLAN_VERSION, "date": DAY,
+                      "source": "fixture" if os.environ.get("PULLRADAR_TEST_FIXTURE") else "live",
+                      "cards": cards, "items": plan})
     source_label = "fixture di prova" if os.environ.get("PULLRADAR_TEST_FIXTURE") else "dati live verificati"
     print(f"Preparati {len(plan)} contenuti per {DAY}; {source_label}")
 
