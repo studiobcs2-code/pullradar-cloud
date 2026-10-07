@@ -6,6 +6,10 @@ on:
       timezone: Europe/Rome
     - cron: '37 7 * * *'
       timezone: Europe/Rome
+    - cron: '5 19 * * *'
+      timezone: Europe/Rome
+    - cron: '15 19 * * *'
+      timezone: Europe/Rome
     - cron: '25 19 * * *'
       timezone: Europe/Rome
     - cron: '35 19 * * *'
