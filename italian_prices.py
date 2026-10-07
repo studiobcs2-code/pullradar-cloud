@@ -79,7 +79,13 @@ def italian_nm_price(blueprint_id, token):
         prices.append(price["cents"])
     prices.sort()
     if len(prices) < 5:
-        raise ValueError(f"Meno di cinque offerte italiane Near Mint per blueprint {blueprint_id}")
+        languages = sorted({str((offer.get("properties_hash") or {}).get("pokemon_language")) for offer in offers})
+        conditions = sorted({str((offer.get("properties_hash") or {}).get("condition")) for offer in offers})
+        raise ValueError(
+            f"Meno di cinque offerte italiane Near Mint per blueprint {blueprint_id}: "
+            f"{len(prices)} idonee su {len(offers)} restituite; "
+            f"lingue={languages}, condizioni={conditions}"
+        )
     return round(mean(prices[:5]) / 100, 2), len(prices)
 
 
