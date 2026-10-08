@@ -1,6 +1,6 @@
 """PullRadar: verified market snapshots -> static Instagram assets -> Buffer.
 
-No card scans are downloaded or published. `prepare` is safe without credentials;
+Card images supplied by the user are paired with the exact tracked printing.
 `publish` requires a Buffer key and refuses fixture data.
 """
 
@@ -152,15 +152,30 @@ def text(draw, xy, value, size=44, fill="white", bold=False):
     draw.text(xy, value, font=font(size, bold), fill=fill, stroke_width=0)
 
 
-def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC", note=None, price_direction=None):
+def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC", note=None,
+           price_direction=None, background_path=None):
     size = (1080, 1920) if story else (1080, 1350)
     im = Image.new("RGB", size, "#071522")
-    art = Image.open(ROOT / art_path).convert("RGB")
+    user_card = art_path.startswith("art/user-cards/")
+    source = (background_path or "art/radar.jpg") if user_card else art_path
+    art = Image.open(ROOT / source).convert("RGB")
     target_h = 1160 if story else 860
     scale = max(1080 / art.width, target_h / art.height)
     art = art.resize((int(art.width * scale), int(art.height * scale)), Image.Resampling.LANCZOS)
     x = (1080 - art.width) // 2
     im.paste(art, (x, 110))
+    if user_card:
+        card = Image.open(ROOT / art_path).convert("RGB")
+        max_height = (1130 if story else 800) - 190
+        scale = min(680 / card.width, max_height / card.height)
+        card = card.resize((round(card.width * scale), round(card.height * scale)), Image.Resampling.LANCZOS)
+        left = (1080 - card.width) // 2
+        top = 170 + (max_height - card.height) // 2
+        shadow = ImageDraw.Draw(im)
+        shadow.rounded_rectangle((left - 13, top - 13, left + card.width + 13,
+                                  top + card.height + 13), radius=20, fill="#061420",
+                                 outline="#5de5e9", width=3)
+        im.paste(card, (left, top))
     overlay = Image.new("RGBA", size, (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
     footer_y = 1130 if story else 800
@@ -193,7 +208,9 @@ def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC", note
             text(draw, (62, y), chunk, 36, color)
             y += 53
         y += 7
-    text(draw, (62, note_y), note or "Illustrazione originale · non immagine della carta", 23, "#9fb6c5")
+    default_note = ("Carta italiana fornita dall'utente · prezzi CardTrader" if user_card
+                    else "Sfondo grafico PullRadar")
+    text(draw, (62, note_y), note or default_note, 23, "#9fb6c5")
     out.parent.mkdir(parents=True, exist_ok=True)
     im.save(out, "JPEG", quality=86, optimize=True)
 
@@ -257,11 +274,12 @@ def prepare():
             "RICERCHE" if format_name == "ricerche" else "MERCATO GCC")
         for slide, (slide_title, lines) in enumerate(slides, 1):
             p = PUBLIC / f"post-{number}-{slide}.jpg"
-            artwork = (art_override or card["art"]) if slide == 1 else ("art/radar.jpg" if slide == 2 else "art/market-bars.jpg")
-            canvas(artwork, slide_title, lines, p, section=section, price_direction=card["direction"])
+            artwork = card["art"] if slide == 1 else ("art/radar.jpg" if slide == 2 else "art/market-bars.jpg")
+            canvas(artwork, slide_title, lines, p, section=section,
+                   price_direction=card["direction"], background_path=art_override if slide == 1 else None)
             files.append(p.relative_to(ROOT).as_posix())
         item = {"key": f"post-{number}", "type": "post", "hour": hour, "files": files,
-                "caption": caption, "format": format_name, "title": title, "art": art_override or card["art"]}
+                "caption": caption, "format": format_name, "title": title, "art": card["art"]}
         if event_url:
             item["event_url"] = event_url
         plan.append(item)
@@ -280,7 +298,7 @@ def prepare():
                    f"{previous_label(card)}; {price_change_label(card)}. "
                    "Media delle 5 offerte italiane Near Mint più basse su CardTrader, spedizione esclusa; "
                    f"rilevato {card['updated']} (Roma). Prezzo richiesto, non vendita conclusa. "
-                   "Illustrazione originale ispirata al soggetto, non scansione della carta. "
+                   "Immagine della carta italiana fornita dall'utente. "
                    f"Scheda: {card['url']}\n#PokemonTCG #PullRadar #ChaseCards")
         add_post(number, hour, card, card["name"] + " " + number_label, slides, caption, "mercato")
 
@@ -320,7 +338,7 @@ def prepare():
                    "Il carosello riporta il titolo della fonte; verifica i dettagli nell'articolo. "
                    f"Prezzo separato: {card['name']} € {card['price']:.2f}; {previous_label(card)}. "
                    "Media 5 offerte italiane NM CardTrader, spedizione esclusa. "
-                   "Illustrazione originale, non scansione. "
+                   "Immagine della carta italiana fornita dall'utente. "
                    "#PokemonTCG #PullRadar #PokemonNews")
         add_post(number, hour, card, event["title"], slides, caption, event["kind"], event["url"], event.get("art"))
 
@@ -344,7 +362,7 @@ def prepare():
                    "Indice relativo medio, non numero assoluto di ricerche e non classifica di tutte le carte. "
                    f"Rilevazione {ranking['updated']} UTC. "
                    f"Prezzo separato: {card['name']} € {card['price']:.2f}; {previous_label(card)}. "
-                   "Media 5 offerte italiane NM CardTrader, spedizione esclusa. Illustrazione originale. "
+                   "Media 5 offerte italiane NM CardTrader, spedizione esclusa. Immagine della carta fornita dall'utente. "
                    "Fonte: https://trends.google.com/trends/explore?date=now%207-d "
                    "#PokemonTCG #PullRadar #GoogleTrends")
         add_post(number, hour, card, "Ricerche globali", slides, caption, "ricerche")

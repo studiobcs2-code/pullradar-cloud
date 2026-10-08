@@ -1,9 +1,8 @@
 [
-  {"id": "30th-149", "idProduct": 907756, "art": "art/pikachu.png", "query": "Pikachu pokemon card"},
-  {"id": "30th-150", "idProduct": 907757, "art": "art/pikachu.png", "query": "Pikachu pokemon card"},
-  {"id": "30th-152", "idProduct": 908354, "art": "art/mew.jpg", "query": "Mew pokemon card"},
-  {"id": "30th-154", "idProduct": 908355, "art": "art/gengar.jpg", "query": "Gengar pokemon card"},
-  {"id": "30th-c-001", "idProduct": 907940, "art": "art/charizard.png", "query": "Charizard pokemon card"},
-  {"id": "me04-116", "idProduct": 886509, "art": "art/greninja.jpg", "query": "Greninja pokemon card"},
-  {"id": "me05-116", "idProduct": 895901, "art": "art/darkrai.jpg", "query": "Darkrai pokemon card"}
+  {"id": "30th-149", "idProduct": 907756, "art": "art/user-cards/30th-149.png", "query": "Pikachu pokemon card"},
+  {"id": "30th-150", "idProduct": 907757, "art": "art/user-cards/30th-150.png", "query": "Pikachu pokemon card"},
+  {"id": "30th-152", "idProduct": 908354, "art": "art/user-cards/30th-152.png", "query": "Mew pokemon card"},
+  {"id": "30th-154", "idProduct": 908355, "art": "art/user-cards/30th-154.png", "query": "Gengar pokemon card"},
+  {"id": "me04-116", "idProduct": 886509, "art": "art/user-cards/me04-116.png", "query": "Greninja pokemon card"},
+  {"id": "me05-116", "idProduct": 895901, "art": "art/user-cards/me05-116.png", "query": "Darkrai pokemon card"}
 ]
