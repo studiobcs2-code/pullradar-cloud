@@ -208,7 +208,7 @@ def canvas(art_path, title, lines, out, story=False, section="MERCATO GCC", note
             text(draw, (62, y), chunk, 36, color)
             y += 53
         y += 7
-    default_note = ("Carta italiana fornita dall'utente · prezzi CardTrader" if user_card
+    default_note = ("Immagine carta fornita dall'utente · prezzi carte IT" if user_card
                     else "Sfondo grafico PullRadar")
     text(draw, (62, note_y), note or default_note, 23, "#9fb6c5")
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -251,6 +251,7 @@ def prepare():
             continue
         item["art"] = cfg["art"]
         item["query"] = cfg.get("query", "")
+        item["displayNumber"] = cfg.get("displayNumber")
         cards.append(item)
     if len(cards) < 3:
         raise ValueError("Servono almeno tre schede con cinque offerte italiane Near Mint")
@@ -285,7 +286,7 @@ def prepare():
         plan.append(item)
 
     def market_post(number, hour, card):
-        number_label = f"{card['localId']}/{card['setSize']}"
+        number_label = card.get("displayNumber") or f"{card['localId']}/{card['setSize']}"
         slides = [
             ("CHASE CARD", [card["name"], card["set"], f"Carta {number_label}",
                             f"Prezzo attuale € {card['price']:.2f}"]),
@@ -298,7 +299,7 @@ def prepare():
                    f"{previous_label(card)}; {price_change_label(card)}. "
                    "Media delle 5 offerte italiane Near Mint più basse su CardTrader, spedizione esclusa; "
                    f"rilevato {card['updated']} (Roma). Prezzo richiesto, non vendita conclusa. "
-                   "Immagine della carta italiana fornita dall'utente. "
+                   "Immagine della carta fornita dall'utente. "
                    f"Scheda: {card['url']}\n#PokemonTCG #PullRadar #ChaseCards")
         add_post(number, hour, card, card["name"] + " " + number_label, slides, caption, "mercato")
 
@@ -338,7 +339,7 @@ def prepare():
                    "Il carosello riporta il titolo della fonte; verifica i dettagli nell'articolo. "
                    f"Prezzo separato: {card['name']} € {card['price']:.2f}; {previous_label(card)}. "
                    "Media 5 offerte italiane NM CardTrader, spedizione esclusa. "
-                   "Immagine della carta italiana fornita dall'utente. "
+                   "Immagine della carta fornita dall'utente. "
                    "#PokemonTCG #PullRadar #PokemonNews")
         add_post(number, hour, card, event["title"], slides, caption, event["kind"], event["url"], event.get("art"))
 

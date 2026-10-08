@@ -1,8 +1,8 @@
 # PullRadar cloud — mercato e notizie GCC Pokémon
 
-Automazione Instagram in italiano ospitata su GitHub Actions. Segue sei carte dei set **30° Anniversario**, **Caos Nascente** e **Buio Pesto**. [TCGdex](https://tcgdex.dev/rest/card) dà nome, set e numero. [CardTrader](https://www.cardtrader.com/it/docs/api/full/reference) fornisce offerte filtrate per lingua italiana e stampa. Il valore mostrato è la media delle cinque offerte italiane Near Mint meno care, senza spedizione: è un prezzo richiesto, non una vendita conclusa.
+Automazione Instagram in italiano ospitata su GitHub Actions. Segue sette carte dei set **30° Anniversario**, **Caos Nascente** e **Buio Pesto**. [TCGdex](https://tcgdex.dev/rest/card) dà nome, set e numero. [CardTrader](https://www.cardtrader.com/it/docs/api/full/reference) fornisce offerte filtrate per lingua italiana e stampa. Il valore mostrato è la media delle cinque offerte italiane Near Mint meno care, senza spedizione: è un prezzo richiesto, non una vendita conclusa.
 
-Le carte mostrate nelle grafiche sono le immagini italiane fornite dall'utente, associate alla stampa esatta tramite il numero della carta. Le illustrazioni generate sono usate soltanto come sfondi. La stampa `30th-c-001` non è monitorata: l'immagine di Charizard ricevuta ritrae invece il Set Base 4/102.
+Le carte mostrate nelle grafiche sono le immagini fornite dall'utente, associate alla stampa esatta. Le illustrazioni generate sono usate soltanto come sfondi. L'immagine di Charizard è la ristampa Classic Collection con timbro del 30° anniversario: conserva il numero originale 4/102 ed è registrata come `30th-c-001`. La scansione fornita ha il testo inglese; i prezzi mostrati continuano a riguardare esclusivamente offerte in italiano.
 
 ## Programmazione
 
