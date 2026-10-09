@@ -8,7 +8,11 @@ Le carte mostrate nelle grafiche sono le immagini fornite dall'utente, associate
 
 GitHub Actions prepara e programma alle 07:17 e riprova alle 07:37 (Europe/Rome), senza Mac o chat. Buffer riceve tre caroselli alle **09:00, 13:00 e 19:00** e due storie alle **11:00 e 20:00**. La storia delle 20 viene programmata soltanto se Buffer conferma che il carosello delle 19 è stato inviato; il flusso prova alle 19:05, 19:15, 19:25 e 19:35. Alle 21:15 un controllo verifica i cinque stati e segnala un errore se manca un invio. GitHub può ritardare i flussi programmati; uno slot troppo vicino viene saltato.
 
-Il carosello delle 09:00 segue sempre una chase card. Gli altri due scelgono tra ricerche globali, annuncio ufficiale, notizia giapponese, indiscrezione e carte seguite. Quando non c'è una notizia recente e citabile, il sistema presenta una carta senza attribuirle un prezzo non verificato; non inventa leak o lanci. Un articolo già programmato viene ricordato in `state.json` e non viene ripetuto. Il piano del giorno è salvato in `plan.json` per evitare che il tentativo serale generi contenuti diversi.
+Il carosello delle 09:00 segue sempre una chase card. Gli altri due scelgono tra ricerche globali, annuncio ufficiale, notizia giapponese, indiscrezione e carte seguite. Negli slot liberi da notizie e ricerche, alle 13:00 entra **Sotto la lente**: stampa, illustratore quando indicato nella scheda e prezzo italiano verificato. Il martedì alle 19:00, se entrambe le stampe hanno prezzi idonei, **Pikachu di giorno e di notte** confronta le due scansioni fornite dall'utente e i rispettivi prezzi richiesti. Quando non c'è una notizia recente e citabile, il sistema non inventa leak o lanci. Un articolo già programmato viene ricordato in `state.json` e non viene ripetuto. Il piano del giorno è salvato in `plan.json` per evitare che il tentativo serale generi contenuti diversi.
+
+## Riferimenti editoriali
+
+Il formato visivo prende spunto dai caroselli incentrati sulle carte di [Pokémon TCG](https://www.instagram.com/pokemontcg/), dalla carta del giorno e dai confronti di [RareDex](https://www.instagram.com/raredexofficial/) e dalle domande sui movimenti di prezzo di [DarkDex](https://www.instagram.com/darkdex.app/). Testi e impaginazione sono originali PullRadar; le scansioni sono quelle fornite dall'utente e ogni numero di mercato conserva il metodo italiano CardTrader descritto sotto.
 
 ## Fonti e controlli editoriali
 

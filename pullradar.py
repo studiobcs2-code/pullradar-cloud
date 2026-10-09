@@ -29,7 +29,7 @@ SNAPSHOTS = ROOT / "snapshots.json"
 INSIGHTS = ROOT / "insights.json"
 API = "https://api.tcgdex.net/v2/it/cards/"
 BUFFER = "https://api.buffer.com"
-PLAN_VERSION = 3
+PLAN_VERSION = 4
 
 
 def attach_price_history(cards):
@@ -143,6 +143,7 @@ def fetch_card(card_id):
         "set": card["set"]["name"],
         "setSize": (card["set"].get("cardCount") or {}).get("official") or "?",
         "localId": card.get("localId", ""),
+        "illustrator": card.get("illustrator") or "",
         "updated": NOW.strftime("%d/%m/%Y %H:%M"),
         "url": API + card_id,
     }
@@ -269,15 +270,21 @@ def prepare():
 
     plan = []
 
-    def add_post(number, hour, card, title, slides, caption, format_name, event_url=None, art_override=None):
+    def add_post(number, hour, card, title, slides, caption, format_name, event_url=None,
+                 art_override=None, slide_artworks=None, slide_directions=None):
         files = []
         section = "NEWS GCC" if format_name in ("ufficiale", "giappone", "novita_set", "indiscrezione") else (
-            "RICERCHE" if format_name == "ricerche" else "MERCATO GCC")
+            "RICERCHE" if format_name == "ricerche" else
+            "A CONFRONTO" if format_name == "confronto" else
+            "SOTTO LA LENTE" if format_name == "sotto_lente" else "MERCATO GCC")
         for slide, (slide_title, lines) in enumerate(slides, 1):
             p = PUBLIC / f"post-{number}-{slide}.jpg"
-            artwork = card["art"] if slide == 1 else ("art/radar.jpg" if slide == 2 else "art/market-bars.jpg")
+            artwork = (slide_artworks[slide - 1] if slide_artworks else
+                       card["art"] if slide == 1 else
+                       "art/radar.jpg" if slide == 2 else "art/market-bars.jpg")
+            direction = slide_directions[slide - 1] if slide_directions else card["direction"]
             canvas(artwork, slide_title, lines, p, section=section,
-                   price_direction=card["direction"], background_path=art_override if slide == 1 else None)
+                   price_direction=direction, background_path=art_override if slide == 1 else None)
             files.append(p.relative_to(ROOT).as_posix())
         item = {"key": f"post-{number}", "type": "post", "hour": hour, "files": files,
                 "caption": caption, "format": format_name, "title": title, "art": card["art"]}
@@ -303,6 +310,54 @@ def prepare():
                    f"Scheda: {card['url']}\n#PokemonTCG #PullRadar #ChaseCards")
         add_post(number, hour, card, card["name"] + " " + number_label, slides, caption, "mercato")
 
+    def spotlight_post(number, hour, card):
+        number_label = card.get("displayNumber") or f"{card['localId']}/{card['setSize']}"
+        illustrator = card["illustrator"] or "Non indicato nella scheda"
+        slides = [
+            ("SOTTO LA LENTE", [card["name"], card["set"], f"Carta {number_label}",
+                                   "Quale dettaglio noti per primo?"]),
+            ("LA STAMPA", [f"Set: {card['set']}", f"Numero: {number_label}",
+                            f"Illustrazione: {illustrator}", "Immagine della stampa mostrata"]),
+            ("IL PREZZO ITALIANO", [f"Prezzo attuale € {card['price']:.2f}",
+                                    previous_label(card), price_change_label(card),
+                                    "5 offerte italiane NM · CardTrader"]),
+        ]
+        caption = (f"🔍 Sotto la lente: {card['name']} · {card['set']} #{number_label}. "
+                   f"Illustrazione: {illustrator}. Quale dettaglio ti colpisce di più? "
+                   f"Prezzo richiesto € {card['price']:.2f}; {previous_label(card)}; "
+                   f"{price_change_label(card)}. Media delle 5 offerte italiane Near Mint più basse "
+                   f"su CardTrader, spedizione esclusa; rilevato {card['updated']} (Roma). "
+                   "Non è una vendita conclusa. Immagine della carta fornita dall'utente. "
+                   f"Scheda: {card['url']}\n#PokemonTCG #PullRadar #CartaDelGiorno")
+        add_post(number, hour, card, card["name"] + " sotto la lente", slides, caption, "sotto_lente")
+
+    def comparison_post(number, hour, day_card, night_card):
+        def label(card):
+            return card.get("displayNumber") or f"{card['localId']}/{card['setSize']}"
+        difference = abs(day_card["price"] - night_card["price"])
+        slides = [
+            ("PIKACHU DI GIORNO", [f"Carta {label(day_card)} · {day_card['set']}",
+                                     f"Prezzo attuale € {day_card['price']:.2f}",
+                                     previous_label(day_card), "Quale scena preferisci?"]),
+            ("PIKACHU DI NOTTE", [f"Carta {label(night_card)} · {night_card['set']}",
+                                     f"Prezzo attuale € {night_card['price']:.2f}",
+                                     previous_label(night_card), "Quale scena preferisci?"]),
+            ("IL CONFRONTO", [f"Giorno € {day_card['price']:.2f} · notte € {night_card['price']:.2f}",
+                                f"Differenza tra prezzi richiesti € {difference:.2f}",
+                                "Media 5 offerte italiane NM ciascuna", "CardTrader · spedizione esclusa"]),
+        ]
+        caption = ("⚡ Pikachu di giorno o di notte? Due illustrazioni del 30° anniversario a confronto. "
+                   f"Giorno #{label(day_card)}: € {day_card['price']:.2f}; {previous_label(day_card)}. "
+                   f"Notte #{label(night_card)}: € {night_card['price']:.2f}; {previous_label(night_card)}. "
+                   f"Differenza tra prezzi richiesti: € {difference:.2f}. "
+                   "Per ogni stampa: media delle 5 offerte italiane Near Mint più basse su CardTrader, "
+                   f"spedizione esclusa; rilevato {day_card['updated']} (Roma). Non sono vendite concluse. "
+                   "Quale immagine sceglieresti? Scansioni fornite dall'utente. "
+                   f"Schede: {day_card['url']} · {night_card['url']}\n#PokemonTCG #PullRadar #Pikachu")
+        add_post(number, hour, day_card, "Pikachu giorno e notte", slides, caption, "confronto",
+                 slide_artworks=[day_card["art"], night_card["art"], "art/market-bars.jpg"],
+                 slide_directions=[day_card["direction"], night_card["direction"], None])
+
     market_post(1, 9, a)
 
     ranking = None
@@ -315,6 +370,7 @@ def prepare():
     seen = s.get("covered_events", {})
     candidates = [] if os.environ.get("PULLRADAR_TEST_FIXTURE") else news_candidates(NOW)
     news = [event for event in candidates if event["url"] not in seen][:2]
+    comparison_cards = {card["id"]: card for card in cards if card["id"] in ("30th-149", "30th-150")}
 
     def news_post(number, hour, event, card):
         label = {"ufficiale": "ANNUNCIO UFFICIALE", "giappone": "NEWS DAL GIAPPONE",
@@ -375,14 +431,17 @@ def prepare():
         if ranking:
             ranking_post(2, 13)
         else:
-            market_post(2, 13, b)
+            spotlight_post(2, 13, b)
         news_post(3, 19, news[0], c)
     else:
         if ranking:
             ranking_post(2, 13)
         else:
-            market_post(2, 13, b)
-        market_post(3, 19, c)
+            spotlight_post(2, 13, b)
+        if NOW.weekday() == 1 and len(comparison_cards) == 2:
+            comparison_post(3, 19, comparison_cards["30th-149"], comparison_cards["30th-150"])
+        else:
+            market_post(3, 19, c)
 
     for idx, (hour, card, label) in enumerate([(11, a, "IL DATO DEL GIORNO"),
                                                (20, c, "NUOVO POST SUL PROFILO")], 1):
