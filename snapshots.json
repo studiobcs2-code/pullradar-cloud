@@ -25,6 +25,13 @@
       "value": 50.24,
       "offers": 49,
       "source_updated": "09/10/2026 07:32"
+    },
+    {
+      "date": "2026-10-10",
+      "metric": "cardtrader.it.nm.lowest5.mean",
+      "value": 50.24,
+      "offers": 49,
+      "source_updated": "10/10/2026 07:30"
     }
   ],
   "30th-150": [
@@ -53,6 +60,13 @@
       "value": 55.32,
       "offers": 24,
       "source_updated": "09/10/2026 07:32"
+    },
+    {
+      "date": "2026-10-10",
+      "metric": "cardtrader.it.nm.lowest5.mean",
+      "value": 55.32,
+      "offers": 24,
+      "source_updated": "10/10/2026 07:30"
     }
   ],
   "30th-152": [
@@ -75,6 +89,13 @@
       "value": 92.97,
       "offers": 40,
       "source_updated": "09/10/2026 07:32"
+    },
+    {
+      "date": "2026-10-10",
+      "metric": "cardtrader.it.nm.lowest5.mean",
+      "value": 92.97,
+      "offers": 40,
+      "source_updated": "10/10/2026 07:30"
     }
   ],
   "30th-154": [
@@ -97,6 +118,13 @@
       "value": 72.62,
       "offers": 30,
       "source_updated": "09/10/2026 07:32"
+    },
+    {
+      "date": "2026-10-10",
+      "metric": "cardtrader.it.nm.lowest5.mean",
+      "value": 72.62,
+      "offers": 30,
+      "source_updated": "10/10/2026 07:30"
     }
   ],
   "30th-c-001": [
@@ -119,6 +147,13 @@
       "value": 222.87,
       "offers": 17,
       "source_updated": "09/10/2026 07:32"
+    },
+    {
+      "date": "2026-10-10",
+      "metric": "cardtrader.it.nm.lowest5.mean",
+      "value": 222.87,
+      "offers": 17,
+      "source_updated": "10/10/2026 07:30"
     }
   ],
   "me04-116": [
@@ -141,6 +176,13 @@
       "value": 137.53,
       "offers": 45,
       "source_updated": "09/10/2026 07:32"
+    },
+    {
+      "date": "2026-10-10",
+      "metric": "cardtrader.it.nm.lowest5.mean",
+      "value": 137.53,
+      "offers": 45,
+      "source_updated": "10/10/2026 07:30"
     }
   ],
   "me05-116": [
@@ -163,6 +205,13 @@
       "value": 191.13,
       "offers": 25,
       "source_updated": "09/10/2026 07:32"
+    },
+    {
+      "date": "2026-10-10",
+      "metric": "cardtrader.it.nm.lowest5.mean",
+      "value": 191.13,
+      "offers": 25,
+      "source_updated": "10/10/2026 07:30"
     }
   ]
 }
